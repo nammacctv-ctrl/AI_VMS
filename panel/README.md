@@ -6,6 +6,7 @@ Multi-tenant reseller panel and theme platform. See `../PRD.md`, `../ARCHITECTUR
 - `db/migrations/0001_init.sql`: tenants, domains, themes, audit log, double-entry ledger. Row-level security on every tenant table, append-only ledger, balance enforced at commit.
 - `src/lib/tenancy`: host classification and database tenant resolution.
 - `src/lib/db/withTenant.ts`: per-request tenant context (`set_config(..., true)`).
+- `src/lib/auth` and `src/app/api/auth`: signup, login (scrypt passwords, 7-day sessions stored as hashes, account lockout, TOTP two-factor with replay protection, encrypted 2FA secrets).
 - `src/lib/ledger`: idempotent balanced postings, derived balances.
 - `src/lib/themes`: token schema, contrast checks, safe CSS compiler.
 - `src/app`: placeholder home, `/api/health`, `/themes/preview`.
@@ -21,4 +22,4 @@ npm run dev
 Try `/themes/preview?preset=trader&accent=%23be185d`.
 
 ## Not built yet
-Auth, catalog, orders, supplier adapters, billing, tenant admin UI. See `../TASKS.md`.
+Passkeys, staff management screens, per-IP rate limiting, password reset, catalog, orders, supplier adapters, billing, tenant admin UI. See `../TASKS.md`.

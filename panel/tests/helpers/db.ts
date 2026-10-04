@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
 import pg from "pg";
@@ -34,8 +34,10 @@ export async function createTestDb(): Promise<TestDb> {
   };
 
   const ownerPool = new pg.Pool({ connectionString: withDb(), max: 4 });
-  const sql = await readFile(path.join(__dirname, "..", "..", "db", "migrations", "0001_init.sql"), "utf8");
-  await ownerPool.query(sql);
+  const dir = path.join(__dirname, "..", "..", "db", "migrations");
+  for (const file of (await readdir(dir)).filter((f) => f.endsWith(".sql")).sort()) {
+    await ownerPool.query(await readFile(path.join(dir, file), "utf8"));
+  }
 
   // The login role is shared per cluster; create it once and grant membership.
   const root = new pg.Client({ connectionString: adminUrl });

@@ -41,6 +41,7 @@ services:
     environment:
       DATABASE_URL: postgres://panel_login:${DB_APP_PASSWORD}@db:5432/panel
       PLATFORM_ROOT_DOMAIN: ${PLATFORM_ROOT_DOMAIN:?set PLATFORM_ROOT_DOMAIN}
+      APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:?set APP_ENCRYPTION_KEY}
     read_only: true
     tmpfs: [/tmp, /app/.next/cache]
     cap_drop: [ALL]

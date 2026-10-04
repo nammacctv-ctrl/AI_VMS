@@ -19,9 +19,9 @@ Phases match the roadmap in [docs/PLATFORM_STRATEGY.md](docs/PLATFORM_STRATEGY.m
 - [x] T-103 Postgres setup with migrations; app role without BYPASSRLS
 - [x] T-104 Tenancy: tenants, domains, host resolution middleware, `SET LOCAL app.tenant_id`
 - [x] T-105 RLS policies and cross-tenant isolation test harness
-- [ ] T-106 Identity: signup, login, sessions, TOTP
+- [x] T-106 Identity: signup, login, sessions, TOTP
 - [ ] T-107 Passkeys (WebAuthn)
-- [ ] T-108 Staff roles and permissions
+- [~] T-108 Staff roles and permissions
 - [ ] T-109 API keys with scopes and rate limits
 - [ ] T-110 Audit log
 - [~] T-111 Ledger: accounts, entries, idempotency, nightly reconciliation job
@@ -64,4 +64,5 @@ Phases match the roadmap in [docs/PLATFORM_STRATEGY.md](docs/PLATFORM_STRATEGY.m
 - [ ] T-405 Optional signed self-hosted tier
 
 ## Next up
-T-101, T-103, T-104 and T-105 are done (code in `panel/`, 24 tests passing). Next: T-106 (auth), T-107, T-108, then T-112 (catalog). T-111 needs the nightly reconciliation job; T-102 needs the CI workflow to run once on GitHub; T-119 still needs the editor UI (T-120); T-126 has Docker/Compose files but the images have not been built or deployed yet.
+Done in `panel/` (40 tests passing): T-101, T-103, T-104, T-105, T-106. Partly done: T-102 (CI file written, not yet run on GitHub), T-108 (roles stored; no permission checks or management screens), T-111 (no nightly reconciliation job), T-119 (no editor UI), T-126 (Docker files written, images never built).
+Next: T-108 permissions and staff invites, T-109 API keys, T-110 audit log writes, then T-112 catalog. Also needed before real customers: password reset by email, per-IP rate limiting on login, T-107 passkeys.
