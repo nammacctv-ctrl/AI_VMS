@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compileTheme, scopeCss } from "@/lib/themes/compile";
+import { compileTheme, previewStyle } from "@/lib/themes/compile";
 import { contrastRatio } from "@/lib/themes/contrast";
 import { defaultTheme } from "@/lib/themes/presets";
 
@@ -76,13 +76,23 @@ describe("brand preview helpers", () => {
     expect(pale.ok && pale.adjusted).toBe(true);
     expect(dark.ok && dark.adjusted).toBe(false);
   });
-  it("scopes compiled css to a container, including the dark media query", () => {
-    const r = compileTheme({ ...defaultTheme("light"), mode: "auto" });
+  it("exposes the same values as plain variables for inline-style previews, following mode", () => {
+    const get = (mode: "light" | "dark" | "auto", dark: boolean) => {
+      const r = compileTheme({ ...defaultTheme("light"), mode, accent: "#be185d" });
+      if (!r.ok) throw new Error("should compile");
+      return previewStyle(r, dark);
+    };
+    expect(get("light", true)["--surface"]).toBe("#ffffff");
+    expect(get("dark", false)["--surface"]).toBe("#0b1220");
+    expect(get("auto", false)["--surface"]).toBe("#ffffff");
+    expect(get("auto", true)["--surface"]).toBe("#0b1220");
+    expect(get("light", false)["--accent"]).toBe("#be185d");
+    expect(get("light", false)["--radius"]).toBe("8px");
+  });
+  it("the css text contains exactly those variables", () => {
+    const r = compileTheme({ ...defaultTheme("light"), mode: "dark", accent: "#be185d" });
     if (!r.ok) throw new Error("should compile");
-    const scoped = scopeCss(r.css, ".preview");
-    expect(scoped).not.toContain(":root");
-    expect(scoped).toContain(".preview{");
-    expect(scoped).toContain("@media (prefers-color-scheme:dark){.preview{");
+    for (const [k, v] of Object.entries(previewStyle(r, true))) expect(r.css).toContain(`${k}:${v}`);
   });
   it("drops unknown keys, so stored themes only hold known settings", () => {
     const r = compileTheme({ ...defaultTheme("light"), logoUrl: "https://x.test/a.png", evil: "<script>" });

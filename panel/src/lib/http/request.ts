@@ -16,10 +16,35 @@ export function sameOrigin(req: Request): boolean {
   try { return new URL(origin).host === host; } catch { return false; }
 }
 
-export async function readJson<S extends z.ZodType>(req: Request, schema: S): Promise<z.infer<S> | null> {
+/**
+ * Read a request body but stop as soon as it goes over `max` bytes, so a huge or
+ * endless (chunked) upload cannot fill the server's memory. Returns null if too big.
+ */
+export async function readLimited(req: Request, max: number): Promise<Uint8Array | null> {
+  const declared = Number(req.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > max) return null;
+  if (!req.body) return new Uint8Array();
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > max) { await reader.cancel().catch(() => undefined); return null; }
+    chunks.push(value);
+  }
+  const out = new Uint8Array(total);
+  let at = 0;
+  for (const c of chunks) { out.set(c, at); at += c.byteLength; }
+  return out;
+}
+
+export async function readJson<S extends z.ZodType>(req: Request, schema: S, maxBytes = 10_000): Promise<z.infer<S> | null> {
   if (!req.headers.get("content-type")?.toLowerCase().startsWith("application/json")) return null;
-  const text = await req.text();
-  if (text.length > 10_000) return null;
+  const bytes = await readLimited(req, maxBytes);
+  if (!bytes) return null;
+  const text = new TextDecoder().decode(bytes);
   try {
     const parsed = schema.safeParse(JSON.parse(text));
     return parsed.success ? parsed.data : null;

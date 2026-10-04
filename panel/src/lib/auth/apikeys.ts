@@ -53,7 +53,8 @@ export async function authenticateApiKey(pool: Pool, tenantId: string, bearer: s
     const { rows } = await c.query(
       `SELECT k.id, k.user_id, k.secret_hash, k.scopes, k.last_used_at, u.role, u.customer_group_id
          FROM api_keys k JOIN users u ON u.tenant_id = k.tenant_id AND u.id = k.user_id
-        WHERE k.prefix = $1 AND k.revoked_at IS NULL AND (k.expires_at IS NULL OR k.expires_at > now())`, [prefix]);
+        WHERE k.prefix = $1 AND k.revoked_at IS NULL AND u.disabled_at IS NULL
+          AND (k.expires_at IS NULL OR k.expires_at > now())`, [prefix]);
     const k = rows[0];
     if (!k) return null;
     const a = Buffer.from(sha256(secret!));

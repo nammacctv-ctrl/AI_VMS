@@ -95,13 +95,15 @@ describe.skipIf(!adminUrl)("database: staff, keys, audit, catalog", () => {
       await expect(changeRole(db.appPool, a, actor(await userId(a, "adm@alpha.test"), "owner"), owner.userId, "admin")).rejects.toThrow(/at least one owner/);
     });
 
-    it("removing a user deletes their sessions and API keys", async () => {
+    it("removing a user ends their sessions and revokes their API keys, but keeps the person on record", async () => {
       const id = await join(a, owner, "temp@alpha.test", "support");
       await login(db.appPool, a, { email: "temp@alpha.test", password: PW });
-      await createApiKey(db.appPool, a, { userId: id, role: "support", label: `user:${id}` }, { name: "k", scopes: ["catalog.read"] });
+      const k = await createApiKey(db.appPool, a, { userId: id, role: "support", label: `user:${id}` }, { name: "k", scopes: ["catalog.read"] });
       await removeUser(db.appPool, a, owner, id);
-      const left = await db.ownerPool.query("SELECT (SELECT count(*) FROM sessions WHERE user_id=$1)::int AS s, (SELECT count(*) FROM api_keys WHERE user_id=$1)::int AS k", [id]);
-      expect(left.rows[0]).toEqual({ s: 0, k: 0 });
+      const left = await db.ownerPool.query("SELECT (SELECT count(*) FROM sessions WHERE user_id=$1)::int AS s, (SELECT count(*) FROM api_keys WHERE user_id=$1 AND revoked_at IS NULL)::int AS k, (SELECT disabled_at IS NOT NULL FROM users WHERE id=$1) AS gone", [id]);
+      expect(left.rows[0]).toEqual({ s: 0, k: 0, gone: true });
+      expect(await authenticateApiKey(db.appPool, a, k.key)).toBeNull();
+      expect((await login(db.appPool, a, { email: "temp@alpha.test", password: PW })).status).toBe("invalid");
     });
 
     it("user lists are tenant-isolated", async () => {

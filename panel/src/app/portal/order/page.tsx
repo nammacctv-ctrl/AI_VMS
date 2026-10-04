@@ -33,10 +33,13 @@ export default function NewOrder() {
     if (!selected) return;
     setBusy(true); setError(""); setPlaced(null);
     try {
-      const r = await api<{ order: { seq: string; serviceName: string } }>("/api/orders", { body: { serviceId, input, reference } });
+      const r = await api<{ order: { seq: string; serviceName: string } }>("/api/orders", { body: { serviceId, input, reference, expectedPriceMinor: selected.priceMinor } });
       setPlaced({ seq: r.order.seq, name: r.order.serviceName });
       setInput(""); setReference(newReference()); wallet.reload();
-    } catch (err) { setError(err instanceof ApiError ? err.message : "Could not place the order."); }
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not place the order.");
+      if (err instanceof ApiError && /price has changed/.test(err.message)) prices.reload(); // show the new price
+    }
     finally { setBusy(false); }
   }
 

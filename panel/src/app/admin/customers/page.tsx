@@ -5,7 +5,7 @@ import { Alert, CopyButton, Empty, Field, Loading, Modal } from "@/components/ui
 import { api, ApiError, inr, newReference, parseRupees } from "@/lib/ui/api";
 import { useLoad } from "@/lib/ui/hooks";
 
-interface User { id: string; email: string; role: string; customerGroupId: string | null; totpEnabled: boolean; balanceMinor?: number }
+interface User { id: string; email: string; role: string; customerGroupId: string | null; totpEnabled: boolean; disabled: boolean; balanceMinor?: number }
 interface Group { id: string; name: string; defaultMarkupBps: number; isDefault: boolean }
 
 const MANAGES: Record<string, string[]> = { owner: ["owner", "admin", "support", "reseller"], admin: ["support", "reseller"] };
@@ -21,6 +21,8 @@ export default function Customers() {
 
   const [inv, setInv] = useState({ email: "", role: "reseller", groupId: "" });
   const [link, setLink] = useState("");
+  const [linkFor, setLinkFor] = useState("");
+  const [showRemoved, setShowRemoved] = useState(false);
   const [msg, setMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const [credit, setCredit] = useState<User | null>(null);
   const [amount, setAmount] = useState("");
@@ -33,7 +35,7 @@ export default function Customers() {
     e.preventDefault(); setMsg(null); setLink("");
     try {
       const r = await api<{ inviteToken: string }>("/api/staff/invite", { body: { email: inv.email, role: inv.role, customerGroupId: inv.role === "reseller" && inv.groupId ? inv.groupId : null } });
-      setLink(`${window.location.origin}/accept-invite?token=${r.inviteToken}`); setInv({ ...inv, email: "" }); users.reload();
+      setLink(`${window.location.origin}/accept-invite?token=${r.inviteToken}`); setLinkFor(inv.email); setInv({ ...inv, email: "" }); users.reload();
     } catch (x) { setMsg({ kind: "error", text: x instanceof ApiError ? x.message : "Could not create the invitation." }); }
   }
   async function addCredit(e: FormEvent) {
@@ -52,8 +54,18 @@ export default function Customers() {
     if (!confirm(`Change ${u.email} to ${role}? They will be signed out.`)) return;
     try { await api(`/api/staff/${u.id}`, { method: "PATCH", body: { role } }); users.reload(); } catch (x) { setMsg({ kind: "error", text: (x as Error).message }); }
   }
+  async function resetAccess(u: User) {
+    const restoring = u.disabled;
+    if (!confirm(restoring ? `Restore ${u.email}? You will get a link for them to choose a new password.` : `Reset access for ${u.email}? Their sessions end and two-factor is turned off. You will get a one-time link for them to choose a new password.`)) return;
+    setMsg(null);
+    try {
+      const r = await api<{ inviteToken: string }>(`/api/staff/${u.id}/reset-access`, { method: "POST", body: {} });
+      setLink(`${window.location.origin}/accept-invite?token=${r.inviteToken}`); setLinkFor(u.email); users.reload();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (x) { setMsg({ kind: "error", text: x instanceof ApiError ? x.message : "Could not create the link." }); }
+  }
   async function remove(u: User) {
-    if (!confirm(`Remove ${u.email}? Their access and API keys stop immediately. Their order history is kept.`)) return;
+    if (!confirm(`Remove ${u.email}? They can no longer sign in and their API keys stop working at once. Their orders and credit are kept, and you can restore them later.`)) return;
     try { await api(`/api/staff/${u.id}`, { method: "DELETE" }); users.reload(); } catch (x) { setMsg({ kind: "error", text: (x as Error).message }); }
   }
   const groupName = (id: string | null) => {
@@ -68,7 +80,7 @@ export default function Customers() {
       {canInvite && (
         <form onSubmit={invite} className="card" noValidate>
           <h2 style={{ marginTop: 0 }}>Invite someone</h2>
-          {link && <Alert kind="ok"><strong>Send this link to them (it works once and expires in 7 days):</strong>
+          {link && <Alert kind="ok"><strong>Send this link to {linkFor || "them"} (it works once and expires in 7 days):</strong>
             <div className="row" style={{ marginTop: ".5rem" }}><code className="mono" style={{ wordBreak: "break-all" }}>{link}</code><CopyButton text={link} label="Copy link" /></div></Alert>}
           <div className="grid">
             <Field id="iemail" label="Email"><input id="iemail" className="input" type="email" value={inv.email} onChange={(e) => setInv({ ...inv, email: e.target.value })} required /></Field>
@@ -84,25 +96,29 @@ export default function Customers() {
       {users.error && <Alert>{users.error}</Alert>}
       {users.loading && !users.data && <Loading />}
       {users.data && users.data.users.length === 0 && <Empty>No one yet.</Empty>}
+      {users.data && users.data.users.some((u) => u.disabled) && (
+        <label className="row" style={{ minHeight: 36 }}><input type="checkbox" checked={showRemoved} onChange={(e) => setShowRemoved(e.target.checked)} /> Show removed people</label>
+      )}
       {users.data && (
-        <div className="tablewrap"><table>
+        <div className="tablewrap"><table className="responsive">
           <thead><tr><th>Email</th><th>Role</th><th>Price group</th><th>2FA</th>{canCredit && <th className="right">Credit</th>}<th><span className="sr">Actions</span></th></tr></thead>
-          <tbody>{users.data.users.map((u) => (
-            <tr key={u.id}>
-              <td className="wrap">{u.email}{u.id === me.user.id && <span className="muted small"> (you)</span>}</td>
-              <td>{u.role}</td><td className="small">{u.role === "reseller" ? groupName(u.customerGroupId) : "—"}</td>
-              <td>{u.totpEnabled ? <span className="chip completed">✓ On</span> : <span className="chip neutral">Off</span>}</td>
-              {canCredit && <td className="right nowrap">{u.balanceMinor === undefined ? "—" : inr(u.balanceMinor)}</td>}
-              <td className="nowrap">
-                {canCredit && <button type="button" className="btn small" onClick={() => { setCredit(u); setMsg(null); }}>Add credit</button>}{" "}
+          <tbody>{users.data.users.filter((u) => showRemoved || !u.disabled).map((u) => (
+            <tr key={u.id} style={u.disabled ? { opacity: 0.65 } : undefined}>
+              <td className="wrap" data-label="Email">{u.email}{u.id === me.user.id && <span className="muted small"> (you)</span>}{u.disabled && <> <span className="chip failed">Removed</span></>}</td>
+              <td data-label="Role">{u.role}</td><td className="small" data-label="Price group">{u.role === "reseller" ? groupName(u.customerGroupId) : "—"}</td>
+              <td data-label="2FA">{u.totpEnabled ? <span className="chip completed">✓ On</span> : <span className="chip neutral">Off</span>}</td>
+              {canCredit && <td className="right nowrap" data-label="Credit">{u.balanceMinor === undefined ? "—" : inr(u.balanceMinor)}</td>}
+              <td className="wrap" data-label=""><div className="actions">
+                {canCredit && !u.disabled && <button type="button" className="btn small" onClick={() => { setCredit(u); setMsg(null); }}>Add credit</button>}
                 {canInvite && u.id !== me.user.id && mine.includes(u.role) && (
                   <>
-                    <select aria-label={`Change role for ${u.email}`} className="input" style={{ width: "auto", minHeight: 36, display: "inline-block" }} value={u.role} onChange={(e) => changeRole(u, e.target.value)}>
-                      {mine.map((r) => <option key={r} value={r}>{r}</option>)}</select>{" "}
-                    <button type="button" className="btn danger small" onClick={() => remove(u)}>Remove</button>
+                    <button type="button" className="btn secondary small" onClick={() => resetAccess(u)}>{u.disabled ? "Restore access" : "Reset access"}</button>
+                    {!u.disabled && <select aria-label={`Change role for ${u.email}`} className="input" style={{ width: "auto", minHeight: 36 }} value={u.role} onChange={(e) => changeRole(u, e.target.value)}>
+                      {mine.map((r) => <option key={r} value={r}>{r}</option>)}</select>}
+                    {!u.disabled && <button type="button" className="btn danger small" onClick={() => remove(u)}>Remove</button>}
                   </>
                 )}
-              </td>
+              </div></td>
             </tr>
           ))}</tbody>
         </table></div>

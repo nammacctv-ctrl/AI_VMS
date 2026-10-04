@@ -19,6 +19,8 @@ export class RateLimiter {
 export const loginLimiter = new RateLimiter(10, 60_000);      // per IP + tenant
 export const apiKeyLimiter = new RateLimiter(120, 60_000);    // per key
 export const inviteAcceptLimiter = new RateLimiter(10, 60_000);
+export const signupLimiter = new RateLimiter(5, 3_600_000);       // per IP per hour
+export const orderLimiter = new RateLimiter(30, 60_000);          // per person or key per minute
 
 /** Behind cloudflared the client IP is in CF-Connecting-IP. Ports are not published, so it can't be spoofed from outside. */
 export function clientIp(req: Request): string {

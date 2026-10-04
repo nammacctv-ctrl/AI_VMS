@@ -2,7 +2,7 @@ import { getLogo, removeLogo, setLogo } from "@/lib/brand/brand";
 import { LOGO_MAX_BYTES, LogoError } from "@/lib/brand/logo";
 import { invalidateBrand } from "@/lib/brand/server";
 import { getPool } from "@/lib/db/pool";
-import { json, tenantFromRequest } from "@/lib/http/request";
+import { json, readLimited, tenantFromRequest } from "@/lib/http/request";
 import { guard } from "@/lib/http/principal";
 
 /** Public: the logo is shown on the login page. Locked down so an uploaded file can never run as a page. */
@@ -26,9 +26,8 @@ export async function GET(req: Request) {
 export async function PUT(req: Request) {
   const p = await guard(req, "brand.manage");
   if (p instanceof Response) return p;
-  const declared = Number(req.headers.get("content-length") ?? 0);
-  if (declared > LOGO_MAX_BYTES + 1024) return json({ error: "The logo is too big. Please use a file under 200 KB." }, 413);
-  const data = new Uint8Array(await req.arrayBuffer());
+  const data = await readLimited(req, LOGO_MAX_BYTES + 1);
+  if (!data) return json({ error: "The logo is too big. Please use a file under 200 KB." }, 413);
   try {
     const version = await setLogo(getPool(), p.tenant.id, p.label, req.headers.get("content-type"), data);
     invalidateBrand(p.tenant.id);

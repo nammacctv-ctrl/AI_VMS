@@ -6,7 +6,7 @@ import { useMe } from "@/components/Shell";
 import { Alert, Field, Loading } from "@/components/ui";
 import { api, ApiError, when } from "@/lib/ui/api";
 import { useLoad } from "@/lib/ui/hooks";
-import { compileTheme, scopeCss } from "@/lib/themes/compile";
+import { compileTheme, previewStyle } from "@/lib/themes/compile";
 import { defaultTheme } from "@/lib/themes/presets";
 import type { ThemeDocument } from "@/lib/themes/schema";
 
@@ -34,7 +34,9 @@ export default function Branding() {
   useEffect(() => { if (live.data && !draft) { setDraft(live.data.theme); setHex(live.data.theme.accent); } }, [live.data, draft]);
 
   const result = useMemo(() => (draft ? compileTheme(draft) : null), [draft]);
-  const previewCss = result?.ok ? scopeCss(result.css, ".preview") : "";
+  const [prefersDark, setPrefersDark] = useState(false);
+  useEffect(() => { setPrefersDark(window.matchMedia("(prefers-color-scheme: dark)").matches); }, []);
+  const previewVars = result?.ok ? previewStyle(result, prefersDark) : {};
   const normalised = result?.ok ? result.theme : draft; // compare after validation so key order and defaults match
   const changed = !!normalised && !!live.data && JSON.stringify(normalised) !== JSON.stringify(live.data.theme);
 
@@ -133,8 +135,7 @@ export default function Branding() {
             {!result.ok && <Alert>{result.errors.join(" ")}</Alert>}
             {result.ok && (
               <>
-                <style dangerouslySetInnerHTML={{ __html: previewCss }} />
-                <div className="preview" data-testid="preview" style={{ background: "var(--surface)", color: "var(--text)", fontFamily: "var(--font)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: "1rem" }}>
+                <div className="preview" data-testid="preview" style={{ ...(previewVars as React.CSSProperties), background: "var(--surface)", color: "var(--text)", fontFamily: "var(--font)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: "1rem" }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: ".5rem", marginBottom: ".75rem" }}>
                     <strong>{name || "Your business"}</strong><span className="chip completed" style={{ color: "var(--success)" }}>✓ Completed</span>
                   </div>

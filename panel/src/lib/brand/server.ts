@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { getPool } from "@/lib/db/pool";
 import { resolveTenant } from "@/lib/tenancy/resolve";
 import { compileTheme } from "@/lib/themes/compile";
@@ -7,6 +8,7 @@ import { getBrand } from "./brand";
 export interface RequestBrand {
   name: string | null;      // null on the platform's own pages
   css: string;
+  cssVersion: string;       // content hash: changes only when the look changes
   logoUrl: string | null;
 }
 
@@ -22,6 +24,7 @@ export function invalidateBrand(tenantId: string) {
   for (const [k, v] of cache) if (v.tenantId === tenantId) cache.delete(k);
 }
 
+const versionOf = (css: string) => createHash("sha256").update(css).digest("hex").slice(0, 12);
 const platformCss = () => {
   const r = compileTheme(defaultTheme("light"));
   return r.ok ? r.css : "";
@@ -32,7 +35,8 @@ const platformCss = () => {
  * is unreachable the page still renders with the default look.
  */
 export async function brandForHost(kind: string | null, key: string | null): Promise<RequestBrand> {
-  const platform: RequestBrand = { name: null, css: platformCss(), logoUrl: null };
+  const platformCssText = platformCss();
+  const platform: RequestBrand = { name: null, css: platformCssText, cssVersion: versionOf(platformCssText), logoUrl: null };
   if ((kind !== "subdomain" && kind !== "custom") || !key) return platform;
   const ck = `${kind}:${key}`;
   const hit = cache.get(ck);
@@ -46,6 +50,7 @@ export async function brandForHost(kind: string | null, key: string | null): Pro
     const value: RequestBrand = {
       name: b.name || tenant.name,
       css: compiled.ok ? compiled.css : platform.css,
+      cssVersion: compiled.ok ? versionOf(compiled.css) : platform.cssVersion,
       logoUrl: b.logoVersion ? `/api/brand/logo?v=${b.logoVersion}` : null,
     };
     cache.set(ck, { at: Date.now(), value, tenantId: tenant.id });

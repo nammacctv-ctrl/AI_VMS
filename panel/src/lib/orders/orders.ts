@@ -57,7 +57,7 @@ export interface Buyer { userId: string; customerGroupId: string | null; label: 
  */
 export async function placeOrder(
   pool: Pool, tenantId: string, buyer: Buyer,
-  input: { serviceId: string; input: string; reference?: string },
+  input: { serviceId: string; input: string; reference?: string; expectedPriceMinor?: bigint },
 ): Promise<{ order: Order; replayed: boolean }> {
   const reference = input.reference?.trim() || randomUUID();
   if (reference.length > 100) throw new OrderError("reference is too long");
@@ -75,6 +75,9 @@ export async function placeOrder(
     const svc = await priceForService(c, buyer.customerGroupId, input.serviceId);
     if (!svc) throw new OrderError("service not available");
     if (svc.priceMinor <= 0n) throw new OrderError("this service has no price set");
+    if (input.expectedPriceMinor !== undefined && input.expectedPriceMinor !== svc.priceMinor) {
+      throw new OrderError(`the price has changed to ${(Number(svc.priceMinor) / 100).toFixed(2)} rupees since you looked. Please refresh and check it before ordering.`);
+    }
 
     const value = normaliseInput(svc.inputKind, input.input);
     if (!value || value.length > 200 || /[\x00-\x1f\x7f]/.test(value)) throw new OrderError("input is empty, too long, or has invalid characters");

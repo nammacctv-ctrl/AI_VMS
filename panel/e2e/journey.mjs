@@ -36,6 +36,7 @@ const step = async (name, fn) => {
   try { await fn(); passed++; console.log("PASS", name); }
   catch (e) {
     console.log("FAIL", name, "\n   ", String(e.message).split("\n")[0]);
+    for (const er of errors.slice(0, 4)) console.log("   browser:", er.slice(0, 300));
     for (const p of pages) console.log("   page:", p.url(), "|", (await p.locator("body").innerText().catch(() => "?")).replace(/\s+/g, " ").slice(0, 160));
     process.exitCode = 1; throw e;
   }
@@ -328,6 +329,9 @@ try {
     await owner.getByRole("button", { name: "Publish this look" }).click();
     await owner.getByText(/Published\. Your panel now looks like this/).waitFor();
     await owner.getByText("This is what your panel looks like now.").waitFor();
+    // the owner's own page switches to the new look straight away, with no reload
+    await owner.waitForFunction(() => getComputedStyle(document.body).backgroundColor === "rgb(7, 13, 24)", null, { timeout: 8000 });
+    eq(await owner.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--accent").trim()), "#be185d", "owner page picked up the new colour");
   });
   await step("visitors now see the brand: logo, name, colour and dark mode on the login page", async () => {
     const visitor = await mk({ width: 390, height: 800 });
@@ -371,6 +375,30 @@ try {
     await owner.waitForURL("**/login");
     await owner.goto(tenant + "/admin");
     await owner.waitForURL("**/login");
+  });
+  await step("the browser enforces a strict Content-Security-Policy (an injected script cannot run)", async () => {
+    const p = await mk();
+    const res = await p.goto(tenant + "/login");
+    const csp = res.headers()["content-security-policy"] ?? "";
+    for (const need of ["default-src 'self'", "frame-ancestors 'none'", "object-src 'none'", "base-uri 'none'", "nonce-"]) if (!csp.includes(need)) throw new Error("CSP missing " + need + ": " + csp);
+    if (/unsafe-inline'[^;]*;?/.test(csp.split(";").find((d) => d.trim().startsWith("script-src")) ?? "")) throw new Error("script-src allows unsafe-inline");
+    expectingErrors = true; // the blocked script below is expected to log a CSP violation
+    const ran = await p.evaluate(() => new Promise((resolve) => {
+      window.__pwned = false;
+      const s = document.createElement("script"); s.textContent = "window.__pwned = true";
+      document.body.appendChild(s);
+      // The classic HTML-injection payload: an element with an inline event handler.
+      const box = document.createElement("div");
+      box.innerHTML = '<img src="/api/brand/logo?x=1" onerror="window.__pwned = true"><img src="data:," onerror="window.__pwned = true">';
+      document.body.appendChild(box);
+      setTimeout(() => resolve({ script: window.__pwned }), 400);
+    }));
+    eq(ran.script, false, "injected inline script and inline event handlers must be blocked");
+    const frame = await p.evaluate(() => fetch("https://evil.example/", { mode: "no-cors" }).then(() => "allowed", () => "blocked"));
+    eq(frame, "blocked", "connections to other sites must be blocked");
+    await p.waitForTimeout(400); // let the browser report the deliberate violations before we stop ignoring them
+    expectingErrors = false;
+    await p.context().close();
   });
   await step("no browser errors during the whole journey", async () => {
     if (errors.length) throw new Error(errors.slice(0, 3).join(" | "));

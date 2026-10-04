@@ -109,6 +109,16 @@ describe.skipIf(!adminUrl)("database: wallet and orders", () => {
       expect(await bal(alice)).toBe(before - 12_000n);
       await expect(place(alice, cheapSvc, "someone", "ref-2")).rejects.toThrow(/different order/);
     });
+    it("refuses to charge a different price than the one the reseller saw", async () => {
+      const buyer = await join("pricewatch@shop.test");
+      await credit(buyer, 100_000n, "pw-1");
+      const before = await bal(buyer);
+      const stale = await placeOrder(db.appPool, t, buyer, { serviceId: cheapSvc, input: "pw-a", expectedPriceMinor: 2_000n }).catch((e) => e);
+      expect(String(stale.message)).toMatch(/price has changed to 30\.00/);
+      expect(await bal(buyer)).toBe(before);
+      const good = await placeOrder(db.appPool, t, buyer, { serviceId: cheapSvc, input: "pw-b", expectedPriceMinor: 3_000n });
+      expect(good.order.priceMinor).toBe(3_000n);
+    });
     it("rejects a mistyped IMEI before charging anything", async () => {
       const before = await bal(alice);
       await expect(place(alice, imeiSvc, "490154203237519")).rejects.toThrow(/invalid IMEI/);

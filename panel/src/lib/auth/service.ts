@@ -65,11 +65,16 @@ export async function login(
   const user = await withTenant(pool, tenantId, async (c) =>
     (await c.query(
       `SELECT id, email, password_hash, role, totp_enabled, totp_secret_enc, totp_last_step,
-              customer_group_id, failed_attempts, locked_until FROM users WHERE email = $1`, [email])).rows[0]);
+              customer_group_id, failed_attempts, locked_until, disabled_at FROM users WHERE email = $1`, [email])).rows[0]);
 
   if (!user) {
     await verifyPassword(input.password, await getDummy());
     await withTenant(pool, tenantId, (c) => audit(c, "anon", "auth.login_failed", { email: email.slice(0, 254), reason: "unknown_user" }));
+    return { status: "invalid" };
+  }
+  if (user.disabled_at) {
+    await verifyPassword(input.password, user.password_hash); // same cost as a normal failure
+    await withTenant(pool, tenantId, (c) => audit(c, `user:${user.id}`, "auth.login_blocked", { reason: "removed" }));
     return { status: "invalid" };
   }
   if (user.locked_until && new Date(user.locked_until).getTime() > nowMs) {
@@ -118,7 +123,7 @@ export async function getSessionUser(pool: Pool, tenantId: string, token: string
     const { rows } = await c.query(
       `SELECT u.id, u.email, u.role, u.totp_enabled, u.customer_group_id FROM sessions s
          JOIN users u ON u.tenant_id = s.tenant_id AND u.id = s.user_id
-        WHERE s.token_hash = $1 AND s.expires_at > now()`, [sha256(token)]);
+        WHERE s.token_hash = $1 AND s.expires_at > now() AND u.disabled_at IS NULL`, [sha256(token)]);
     const u = rows[0];
     if (!u) return null;
     await c.query("UPDATE sessions SET last_seen_at = now() WHERE token_hash = $1", [sha256(token)]);

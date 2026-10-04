@@ -16,7 +16,7 @@ cleanup() {
 trap cleanup EXIT
 # Start the real server binary directly so $! is the process that holds the port.
 DATABASE_URL=$(echo "$BASE" | sed -E 's#//[^@]*@#//panel_login:e2epw@#')/$DB \
-PLATFORM_ROOT_DOMAIN=localhost APP_ENCRYPTION_KEY=$(openssl rand -base64 32) \
+ALLOW_PUBLIC_SIGNUP=true PLATFORM_ROOT_DOMAIN=localhost APP_ENCRYPTION_KEY=$(openssl rand -base64 32) \
   node node_modules/next/dist/bin/next start -p "$PORT" >/tmp/e2e-server.log 2>&1 &
 SERVER_PID=$!
 for _ in $(seq 40); do curl -sf "localhost:$PORT/api/health" >/dev/null && break; sleep 0.5; done

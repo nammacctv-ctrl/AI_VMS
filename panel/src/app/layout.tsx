@@ -17,8 +17,8 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   return (
     <html lang="en">
       <head>
-        {/* css is built by compileTheme from validated values only; no tenant text reaches it */}
-        <style dangerouslySetInnerHTML={{ __html: brand.css }} />
+        {/* the look is a same-origin stylesheet built by compileTheme from validated values only */}
+        <link rel="stylesheet" href={`/api/brand/theme.css?v=${brand.cssVersion}`} />
       </head>
       <body>
         <BrandProvider value={{ name: brand.name, logoUrl: brand.logoUrl }}>{children}</BrandProvider>
