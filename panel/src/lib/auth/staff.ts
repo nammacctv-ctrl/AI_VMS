@@ -12,14 +12,19 @@ const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/;
 
 export interface Actor { userId: string; role: Role; label: string }
 
-export interface StaffRow { id: string; email: string; role: Role; customerGroupId: string | null; totpEnabled: boolean; createdAt: string }
+export interface StaffRow { id: string; email: string; role: Role; customerGroupId: string | null; totpEnabled: boolean; createdAt: string; balanceMinor?: bigint }
 
-export async function listUsers(pool: Pool, tenantId: string): Promise<StaffRow[]> {
+export async function listUsers(pool: Pool, tenantId: string, withBalances = false): Promise<StaffRow[]> {
   return withTenant(pool, tenantId, async (c) => {
     const { rows } = await c.query(
-      "SELECT id, email, role, customer_group_id, totp_enabled, created_at FROM users ORDER BY created_at, email");
+      `SELECT u.id, u.email, u.role, u.customer_group_id, u.totp_enabled, u.created_at,
+              (SELECT coalesce(sum(e.amount_minor), 0)::text FROM ledger_accounts a
+                 JOIN ledger_entries e ON e.tenant_id = a.tenant_id AND e.account_id = a.id
+                WHERE a.code = 'wallet:' || u.id::text) AS balance
+         FROM users u ORDER BY u.created_at, u.email`);
     return rows.map((r) => ({ id: r.id, email: r.email, role: r.role, customerGroupId: r.customer_group_id,
-      totpEnabled: r.totp_enabled, createdAt: new Date(r.created_at).toISOString() }));
+      totpEnabled: r.totp_enabled, createdAt: new Date(r.created_at).toISOString(),
+      ...(withBalances ? { balanceMinor: BigInt(r.balance) } : {}) }));
   });
 }
 

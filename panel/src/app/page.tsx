@@ -1,16 +1,16 @@
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
+import Link from "next/link";
+import { redirect } from "next/navigation";
 
 export default async function Home() {
   const h = await headers();
   const kind = h.get("x-host-kind") ?? "platform";
+  if (kind !== "platform") redirect((await cookies()).has("sid") ? "/portal" : "/login");
   return (
-    <main>
+    <main className="center">
       <h1>Namma Panel</h1>
-      <p className="muted">Reseller panel platform by Namma CCTV Private Limited.</p>
-      <div className="card">
-        <p>Request host type: <span className="chip">{kind}</span></p>
-        <p><a href="/themes/preview">Open the theme preview</a></p>
-      </div>
+      <p className="muted">A reseller panel for digital services, by Namma CCTV Private Limited.</p>
+      <p><Link className="btn" href="/signup">Create your panel</Link></p>
     </main>
   );
 }

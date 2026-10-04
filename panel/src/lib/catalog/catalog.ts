@@ -137,7 +137,7 @@ export const setOverride = (
 export interface PriceListItem {
   serviceId: string; name: string; category: string; deliveryTime: string; inputKind: InputKind; priceMinor: bigint;
   // Present only when the caller is allowed to see costs.
-  costMinor?: bigint; marginMinor?: bigint; clampedToCost?: boolean;
+  costMinor?: bigint; marginMinor?: bigint; clampedToCost?: boolean; source?: "group" | "override_markup" | "override_fixed";
 }
 
 async function resolveGroup(c: PoolClient, groupId: string | null) {
@@ -168,7 +168,7 @@ export const priceList = (pool: Pool, t: string, groupId: string | null, include
         markupBps: r.markup_bps, fixedPriceMinor: r.fixed_price_minor == null ? null : BigInt(r.fixed_price_minor),
       });
       const item: PriceListItem = { serviceId: r.id, name: r.name, category: r.category, deliveryTime: r.delivery_time, inputKind: r.input_kind, priceMinor: p.priceMinor };
-      if (includeCost) { item.costMinor = cost; item.marginMinor = p.priceMinor - cost; item.clampedToCost = p.clampedToCost; }
+      if (includeCost) { item.costMinor = cost; item.marginMinor = p.priceMinor - cost; item.clampedToCost = p.clampedToCost; item.source = p.source; }
       return item;
     });
   });

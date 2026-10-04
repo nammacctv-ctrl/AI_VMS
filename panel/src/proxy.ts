@@ -9,6 +9,15 @@ export function proxy(request: NextRequest) {
   const root = process.env.PLATFORM_ROOT_DOMAIN ?? "localhost";
   const target = parseHost(request.headers.get("host"), root);
 
+  const path = request.nextUrl.pathname;
+  const hasSession = /(?:^|;\s*)sid=[^;]+/.test(request.headers.get("cookie") ?? "");
+  // Only real page loads are redirected. Next's background prefetch/RSC requests must pass through:
+  // the page shell holds no data (every API call is authenticated), and redirecting them makes 404 noise.
+  const isRouterFetch = request.headers.has("rsc") || request.headers.has("next-router-prefetch");
+  if ((path.startsWith("/portal") || path.startsWith("/admin")) && !hasSession && !isRouterFetch) {
+    return NextResponse.redirect(new URL("/login", request.url));
+  }
+
   const headers = new Headers(request.headers);
   // Strip anything a client tried to send under our internal names.
   headers.delete("x-host-kind");

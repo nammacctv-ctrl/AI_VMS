@@ -34,8 +34,8 @@ Phases match the roadmap in [docs/PLATFORM_STRATEGY.md](docs/PLATFORM_STRATEGY.m
 - [ ] T-118 Webhooks: outbox, HMAC signing, retries
 - [~] T-119 Theme engine v1: schema, validation, CSS compile, presets, contrast check
 - [ ] T-120 Theme editor UI with preview and rollback
-- [ ] T-121 Reseller UI: dashboard, new order, orders, order detail
-- [ ] T-122 Tenant admin UI: services/pricing, customers, suppliers, settings
+- [x] T-121 Reseller UI: dashboard, new order, my orders (expandable detail), credit, API keys, two-factor setup (works on phones)
+- [~] T-122 Tenant admin UI: order queue, customers and credit, services/prices/suppliers/groups, activity log done; no settings screen, theme editor (T-120) or tenant branding yet
 - [ ] T-123 Subscription billing via gateway and GST invoices
 - [ ] T-124 OpenAPI 3.1 spec and docs site
 - [ ] T-125 Observability: traces, logs, error tracking, supplier-health dashboard
@@ -64,9 +64,9 @@ Phases match the roadmap in [docs/PLATFORM_STRATEGY.md](docs/PLATFORM_STRATEGY.m
 - [ ] T-405 Optional signed self-hosted tier
 
 ## Next up
-Done in `panel/` (108 tests passing): T-101, T-103 to T-106, T-108 to T-110, T-112, T-116 and staff-managed reseller credit. Partly done: T-102 (CI file not yet run on GitHub), T-111 (no nightly reconciliation job), T-119 (no editor UI), T-126 (images never built).
-Everything is API-only today. To run the first 15 resellers, build in this order:
-1. Reseller and owner screens (T-121, T-122): login, price list, place order, my orders, credit; owner: order queue, add credit, services and prices, staff.
-2. Supplier connections (T-113 to T-115). Needs the two suppliers' names and API documentation.
-3. Password reset by email, backups with a tested restore, bulk ordering (T-117), passkeys (T-107), billing (T-123).
+Done in `panel/` (109 tests + a 23-step real-browser journey, `npm run e2e`): T-101, T-103 to T-106, T-108 to T-110, T-112, T-116, T-121 and most of T-122. Partly done: T-102 (CI file not yet run on GitHub; e2e not in CI), T-111 (no nightly reconciliation job), T-119 (no editor UI), T-126 (images never built).
+To run the first 15 resellers, build in this order:
+1. Supplier connections (T-113 to T-115). Needs the two suppliers' names and API documentation. Until then staff fulfil orders by hand in the queue.
+2. Password reset by email (and email for invitations), backups with a tested restore, deployment to a real server with a domain.
+3. Bulk ordering (T-117), order notifications (T-118), tenant branding and theme editor (T-120), passkeys (T-107), billing (T-123).
 Before real money: legal review T-005 must confirm the staff-managed credit model.

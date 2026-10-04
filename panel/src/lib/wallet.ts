@@ -82,10 +82,14 @@ export async function walletStatement(
   const limit = Math.min(Math.max(opts.limit ?? 50, 1), 200);
   return withTenant(pool, tenantId, async (c) => {
     const { rows } = await c.query(
-      `SELECT e.id::text, e.amount_minor::text AS amount, t.memo, e.created_at
+      `SELECT e.id::text, e.amount_minor::text AS amount, e.created_at,
+              CASE WHEN o.charge_tx_id = t.id THEN 'Order #' || o.seq || ': ' || o.service_name
+                   WHEN o.refund_tx_id = t.id THEN 'Refund for order #' || o.seq
+                   ELSE t.memo END AS memo
          FROM ledger_entries e
          JOIN ledger_accounts a ON a.tenant_id = e.tenant_id AND a.id = e.account_id
          JOIN ledger_transactions t ON t.tenant_id = e.tenant_id AND t.id = e.transaction_id
+         LEFT JOIN orders o ON o.tenant_id = t.tenant_id AND (o.charge_tx_id = t.id OR o.refund_tx_id = t.id)
         WHERE a.code = $1 AND ($2::bigint IS NULL OR e.id < $2::bigint)
         ORDER BY e.id DESC LIMIT $3`,
       [`wallet:${userId}`, opts.before && /^\d{1,18}$/.test(opts.before) ? opts.before : null, limit + 1]);

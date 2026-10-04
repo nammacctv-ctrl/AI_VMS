@@ -72,6 +72,16 @@ describe.skipIf(!adminUrl)("database: wallet and orders", () => {
       const st = await walletStatement(db.appPool, t, alice.userId);
       expect(st.rows[0]).toMatchObject({ amountMinor: 100_000n, memo: "payment UPI-1" });
     });
+    it("statement describes orders and refunds in plain words, not ids", async () => {
+      const stmt = await join("stmt@shop.test");
+      await credit(stmt, 10_000n, "stmt-credit");
+      const r = await place(stmt, cheapSvc, "stmt-1");
+      await act(r.order.id, { action: "fail", reason: "test" });
+      const memos = (await walletStatement(db.appPool, t, stmt.userId)).rows.map((x) => x.memo);
+      expect(memos).toContain(`Order #${r.order.seq}: Account check`);
+      expect(memos).toContain(`Refund for order #${r.order.seq}`);
+      expect(memos.some((m) => /[0-9a-f]{8}-[0-9a-f]{4}/.test(m))).toBe(false);
+    });
     it("credit in one tenant is invisible in another", async () => {
       expect(await walletBalance(db.appPool, other, alice.userId)).toBe(0n);
     });
