@@ -15,7 +15,7 @@ Living log of decisions, facts and lessons. Read before starting work; append wh
 | 2026-10-04 | Sell hosted SaaS subscriptions, not a downloadable script | Recurring revenue; control of updates and security | Owner approved (2026-10-04) |
 | 2026-10-04 | Target India resellers first, then South Asia and Middle East | Existing Dhru-style demand | Owner approved (2026-10-04) |
 | 2026-10-04 | TypeScript end to end; Next.js; PostgreSQL with RLS | Single language, strong tenant isolation | Owner approved (2026-10-04) |
-| 2026-10-04 | No stored-value wallets in v1 | Avoid RBI prepaid-instrument rules until legal review | Owner approved (2026-10-04) |
+| 2026-10-04 | No stored-value wallets in v1. Reseller "credit" is built as bookkeeping only: staff add credit manually after the reseller pays the tenant directly (bank/UPI); the platform never receives, holds or moves money and has no payment gateway for it | Avoid RBI prepaid-instrument rules until legal review (T-005 must confirm this reading, since the tenant still owes services against the credit) | Owner approved (2026-10-04); legal confirmation pending |
 | 2026-10-04 | Themes are token data, never tenant code | Upgrade safety and security | Owner approved (2026-10-04) |
 | 2026-10-04 | Dhru-compatible API shim built from public docs only | Migration wedge without legal risk | Owner approved (2026-10-04) |
 | 2026-10-04 | India-region hosting | Latency and data residency | Owner approved (2026-10-04) |
@@ -55,9 +55,17 @@ _None yet._
 
 ## Changelog of these docs
 - 2026-10-04: Created PRD, ARCHITECTURE, RULES, DESIGN, TASKS, MEMORY from the strategy document.
+- 2026-10-04: Added reseller credit (staff-managed) and orders with manual fulfilment (T-116): 108 tests, two real race tests, 16-step HTTP walkthrough. Lesson: row-locking an account needs UPDATE rights the append-only ledger role must not have; use advisory locks instead.
 - 2026-10-04: Added staff permissions, invites, API keys, audit log and service catalog (T-108, T-109, T-110, T-112) with 37 new tests and an end-to-end curl run. Invites are shown once and must be shared by the owner; email delivery is not built. Prices: integer paise, basis-point markups, rounded up, never below cost.
 - 2026-10-04: Added auth (T-106) with end-to-end curl check against a production build.
 - 2026-10-04: Started code in `panel/`. Built and tested: tenancy and RLS, ledger, theme engine, Docker/Compose/cloudflared files. Not verified: Docker image builds (no Docker daemon in the build sandbox), the GitHub Actions workflow, a real cloudflared tunnel.
+
+## Orders and credit (built 2026-10-04)
+- One order = one service + one input (IMEI is checked for 15 digits and the Luhn check digit). Charged immediately from the reseller's credit; failure refunds the exact price once, in the same database transaction. Complete requires a result text shown to the reseller.
+- Safety nets: retry-safe `reference`, 24-hour duplicate block per reseller+service+input (failed orders excluded), per-reseller advisory lock so simultaneous orders cannot overspend, database triggers enforce the state machine and freeze price/cost snapshots, orders and events cannot be deleted.
+- Reseller views never include cost, margin, supplier or staff names. Staff views do.
+- Not built: cancel by reseller, bulk ordering, order notifications/webhooks, supplier auto-dispatch (staff fulfil by hand for now), nightly ledger reconciliation, running-balance on statements.
+- Balance is summed from ledger entries on every order; fine for thousands of entries per reseller, add a snapshot column before it reaches millions.
 
 ## Known gaps in auth (do before real customers)
 - Login is limited to 10 tries per minute per visitor and locks an account for 15 minutes after 5 failures (which also lets someone lock a victim out for 15 minutes). The limiter is in memory, per app instance; move to Redis before running more than one instance.

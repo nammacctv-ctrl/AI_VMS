@@ -17,6 +17,7 @@ const create = z.object({
   costMinor: paise,
   deliveryTime: z.string().max(60).optional(),
   enabled: z.boolean().optional(),
+  inputKind: z.enum(["text", "imei", "serial"]).optional(),
 });
 
 /** Staff view: includes supplier costs, so it needs catalog.cost. */

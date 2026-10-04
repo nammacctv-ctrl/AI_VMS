@@ -29,7 +29,7 @@ Phases match the roadmap in [docs/PLATFORM_STRATEGY.md](docs/PLATFORM_STRATEGY.m
 - [ ] T-113 Supplier adapter interface, wrapper (timeout, retry, circuit breaker, health score)
 - [ ] T-114 Supplier adapter #1
 - [ ] T-115 Supplier adapter #2
-- [ ] T-116 Orders: state machine, queue worker, refunds
+- [x] T-116 Orders: state machine, manual-fulfilment queue, refunds (supplier integrations will call the same functions)
 - [ ] T-117 Bulk ordering: paste and CSV with row validation
 - [ ] T-118 Webhooks: outbox, HMAC signing, retries
 - [~] T-119 Theme engine v1: schema, validation, CSS compile, presets, contrast check
@@ -64,9 +64,9 @@ Phases match the roadmap in [docs/PLATFORM_STRATEGY.md](docs/PLATFORM_STRATEGY.m
 - [ ] T-405 Optional signed self-hosted tier
 
 ## Next up
-Done in `panel/` (77 tests passing): T-101, T-103 to T-106, T-108 to T-110, T-112. Partly done: T-102 (CI file not yet run on GitHub), T-111 (no reconciliation job), T-119 (no editor UI), T-126 (images never built).
-For the first 15 resellers, build in this order:
-1. Wallet funding by staff (ledger) and orders with a manual-fulfilment queue (T-116, plus staff top-up). Needed before any real order.
-2. Reseller and owner screens (T-121, T-122). Everything is API-only today.
-3. Supplier connections (T-113 to T-115). Needs the two suppliers' names and API documentation.
-4. Password reset by email, backups with a tested restore, passkeys (T-107), billing (T-123).
+Done in `panel/` (108 tests passing): T-101, T-103 to T-106, T-108 to T-110, T-112, T-116 and staff-managed reseller credit. Partly done: T-102 (CI file not yet run on GitHub), T-111 (no nightly reconciliation job), T-119 (no editor UI), T-126 (images never built).
+Everything is API-only today. To run the first 15 resellers, build in this order:
+1. Reseller and owner screens (T-121, T-122): login, price list, place order, my orders, credit; owner: order queue, add credit, services and prices, staff.
+2. Supplier connections (T-113 to T-115). Needs the two suppliers' names and API documentation.
+3. Password reset by email, backups with a tested restore, bulk ordering (T-117), passkeys (T-107), billing (T-123).
+Before real money: legal review T-005 must confirm the staff-managed credit model.

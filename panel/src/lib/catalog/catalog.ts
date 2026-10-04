@@ -16,11 +16,13 @@ function violation(err: unknown): never {
   throw err;
 }
 
+export type InputKind = "text" | "imei" | "serial";
+
 export interface Supplier { id: string; name: string; kind: string; enabled: boolean }
 export interface Group { id: string; name: string; defaultMarkupBps: number; isDefault: boolean }
 export interface ServiceRow {
   id: string; supplierId: string; externalRef: string; name: string; category: string;
-  costMinor: bigint; currency: string; deliveryTime: string; enabled: boolean;
+  costMinor: bigint; currency: string; deliveryTime: string; enabled: boolean; inputKind: InputKind;
 }
 
 export const listSuppliers = (pool: Pool, t: string): Promise<Supplier[]> =>
@@ -45,7 +47,7 @@ export const setSupplierEnabled = (pool: Pool, t: string, actor: string, id: str
 
 export interface ServiceInput {
   supplierId: string; externalRef: string; name: string; category?: string;
-  costMinor: bigint; deliveryTime?: string; enabled?: boolean;
+  costMinor: bigint; deliveryTime?: string; enabled?: boolean; inputKind?: InputKind;
 }
 
 function checkCost(cost: bigint) {
@@ -57,9 +59,9 @@ export const createService = (pool: Pool, t: string, actor: string, s: ServiceIn
     checkCost(s.costMinor);
     try {
       const r = await c.query(
-        `INSERT INTO services (tenant_id, supplier_id, external_ref, name, category, cost_minor, delivery_time, enabled)
-         VALUES (app_current_tenant(), $1, $2, $3, $4, $5, $6, $7) RETURNING id`,
-        [s.supplierId, s.externalRef.trim(), s.name.trim(), s.category?.trim() || "general", s.costMinor.toString(), s.deliveryTime ?? "", s.enabled ?? true]);
+        `INSERT INTO services (tenant_id, supplier_id, external_ref, name, category, cost_minor, delivery_time, enabled, input_kind)
+         VALUES (app_current_tenant(), $1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+        [s.supplierId, s.externalRef.trim(), s.name.trim(), s.category?.trim() || "general", s.costMinor.toString(), s.deliveryTime ?? "", s.enabled ?? true, s.inputKind ?? "text"]);
       await audit(c, actor, "catalog.service_created", { id: r.rows[0].id, name: s.name.trim(), costMinor: s.costMinor.toString() });
       return r.rows[0].id as string;
     } catch (e) { return violation(e); }
@@ -133,7 +135,7 @@ export const setOverride = (
   });
 
 export interface PriceListItem {
-  serviceId: string; name: string; category: string; deliveryTime: string; priceMinor: bigint;
+  serviceId: string; name: string; category: string; deliveryTime: string; inputKind: InputKind; priceMinor: bigint;
   // Present only when the caller is allowed to see costs.
   costMinor?: bigint; marginMinor?: bigint; clampedToCost?: boolean;
 }
@@ -155,7 +157,7 @@ export const priceList = (pool: Pool, t: string, groupId: string | null, include
   withTenant(pool, t, async (c) => {
     const g = await resolveGroup(c, groupId);
     const { rows } = await c.query(
-      `SELECT s.id, s.name, s.category, s.delivery_time, s.cost_minor, o.markup_bps, o.fixed_price_minor
+      `SELECT s.id, s.name, s.category, s.delivery_time, s.input_kind, s.cost_minor, o.markup_bps, o.fixed_price_minor
          FROM services s
          JOIN suppliers p ON p.tenant_id = s.tenant_id AND p.id = s.supplier_id AND p.enabled
          LEFT JOIN price_overrides o ON o.tenant_id = s.tenant_id AND o.service_id = s.id AND o.group_id = $1
@@ -165,7 +167,7 @@ export const priceList = (pool: Pool, t: string, groupId: string | null, include
       const p = computePrice(cost, g.default_markup_bps, {
         markupBps: r.markup_bps, fixedPriceMinor: r.fixed_price_minor == null ? null : BigInt(r.fixed_price_minor),
       });
-      const item: PriceListItem = { serviceId: r.id, name: r.name, category: r.category, deliveryTime: r.delivery_time, priceMinor: p.priceMinor };
+      const item: PriceListItem = { serviceId: r.id, name: r.name, category: r.category, deliveryTime: r.delivery_time, inputKind: r.input_kind, priceMinor: p.priceMinor };
       if (includeCost) { item.costMinor = cost; item.marginMinor = p.priceMinor - cost; item.clampedToCost = p.clampedToCost; }
       return item;
     });
@@ -174,7 +176,26 @@ export const priceList = (pool: Pool, t: string, groupId: string | null, include
 export const listServices = (pool: Pool, t: string): Promise<ServiceRow[]> =>
   withTenant(pool, t, async (c) =>
     (await c.query(
-      `SELECT id, supplier_id, external_ref, name, category, cost_minor, currency, delivery_time, enabled
+      `SELECT id, supplier_id, external_ref, name, category, cost_minor, currency, delivery_time, enabled, input_kind
          FROM services ORDER BY category, name`)).rows.map((r) => ({
       id: r.id, supplierId: r.supplier_id, externalRef: r.external_ref, name: r.name, category: r.category,
-      costMinor: BigInt(r.cost_minor), currency: r.currency, deliveryTime: r.delivery_time, enabled: r.enabled })));
+      costMinor: BigInt(r.cost_minor), currency: r.currency, deliveryTime: r.delivery_time, enabled: r.enabled, inputKind: r.input_kind })));
+
+/** Price (and cost snapshot) of one service for one group, inside an existing tenant transaction. */
+export async function priceForService(c: PoolClient, groupId: string | null, serviceId: string) {
+  const g = await resolveGroup(c, groupId);
+  const { rows } = await c.query(
+    `SELECT s.id, s.name, s.supplier_id, s.input_kind, s.cost_minor, o.markup_bps, o.fixed_price_minor
+       FROM services s
+       JOIN suppliers p ON p.tenant_id = s.tenant_id AND p.id = s.supplier_id AND p.enabled
+       LEFT JOIN price_overrides o ON o.tenant_id = s.tenant_id AND o.service_id = s.id AND o.group_id = $2
+      WHERE s.id = $1 AND s.enabled`, [serviceId, g.id]);
+  const r = rows[0];
+  if (!r) return null;
+  const cost = BigInt(r.cost_minor);
+  const p = computePrice(cost, g.default_markup_bps, {
+    markupBps: r.markup_bps, fixedPriceMinor: r.fixed_price_minor == null ? null : BigInt(r.fixed_price_minor),
+  });
+  return { serviceId: r.id as string, name: r.name as string, supplierId: r.supplier_id as string,
+    inputKind: r.input_kind as InputKind, costMinor: cost, priceMinor: p.priceMinor };
+}

@@ -5,8 +5,15 @@ import { RateLimiter } from "@/lib/ratelimit";
 
 describe("permissions", () => {
   it("resellers see prices only, never costs, staff or audit", () => {
-    expect([...ROLE_PERMISSIONS.reseller]).toEqual(["catalog.read"]);
+    expect([...ROLE_PERMISSIONS.reseller].sort()).toEqual(["catalog.read", "orders.create", "orders.read", "wallet.read"]);
     expect(can("reseller", "catalog.cost")).toBe(false);
+    expect(can("reseller", "orders.manage")).toBe(false);
+    expect(can("reseller", "wallet.manage")).toBe(false);
+  });
+  it("support works the order queue but cannot touch money, prices or people", () => {
+    expect(can("support", "orders.manage")).toBe(true);
+    expect(can("support", "wallet.manage")).toBe(false);
+    expect(can("support", "orders.create")).toBe(false);
   });
   it("support can read staff and prices but change nothing", () => {
     expect(can("support", "catalog.manage")).toBe(false);
@@ -20,6 +27,7 @@ describe("permissions", () => {
     expect(KEY_SCOPES).not.toContain("staff.manage");
     expect(KEY_SCOPES).not.toContain("apikeys.manage");
     expect(KEY_SCOPES).not.toContain("staff.read");
+    expect(KEY_SCOPES).not.toContain("wallet.manage"); // keys can never move money into a balance
   });
   it("who can manage whom", () => {
     expect(canManageRole("owner", "owner")).toBe(true);

@@ -17,13 +17,15 @@ Say it like this: *"We are a new platform from an established company. We are st
 
 | Ready and tested | Not ready yet |
 |---|---|
-| Sign up, log in, two-factor, staff and reseller accounts by invitation | Placing orders |
-| Service catalog, your cost, per-group prices, per-service overrides | Reseller wallet and top-ups |
-| API keys for resellers who want to connect their own bots | Connecting to your two suppliers automatically |
-| Activity log of every important action | Screens (everything works through the API only so far) |
-| Deployment files for a VPS | Email, password reset, billing, backups |
+| Sign up, log in, two-factor, staff and reseller accounts by invitation | Screens: today everything works only through the API, so resellers cannot yet use it from a browser |
+| Placing orders with IMEI checking, duplicate protection and automatic refund on failure | Connecting to your two suppliers automatically (staff fulfil orders by hand for now) |
+| Reseller credit that staff add after a payment (no money passes through the platform) | Bulk ordering, order notifications |
+| Service catalog, your cost, per-group prices, per-service overrides | Password reset by email, backups |
+| API keys for resellers who want to connect their own bots | Billing for your own subscriptions |
+| Activity log of every important action | |
+| Deployment files for a VPS | |
 
-**Do not take real customer money or real orders until the "not ready" column is built and tested.** Next build steps, in order: (1) orders and wallet, (2) screens for resellers and for you, (3) the two supplier connections, (4) password reset and backups.
+**Do not take real customer money or real orders until the "not ready" column is built and tested.** Next build steps, in order: (1) screens for resellers and for you, (2) the two supplier connections, (3) password reset and backups.
 
 ## Before you contact anyone: your 10 minutes of credibility
 
@@ -83,7 +85,7 @@ Only after wave 1 runs two weeks without a serious incident. Use the wave 1 rese
 
 ## Go-live checklist (all must be yes)
 
-- [ ] Orders, wallet and screens built and tested by you with small real orders
+- [ ] Screens built, and you have placed and fulfilled small real orders yourself
 - [ ] Both suppliers connected, and one failed order tested end to end with a refund
 - [ ] Daily database backup running, and a restore tested once
 - [ ] Encryption key and passwords saved in a safe place (password manager plus offline copy)
