@@ -32,8 +32,11 @@ Living log of decisions, facts and lessons. Read before starting work; append wh
 ## Owner delegation
 2026-10-04: the owner said they are not a technical or business expert and asked Claude to pick the best option and proceed. Defaults above are therefore approved as recommended: hosted service first, VPS install later as a premium tier, no PHP, build auth before other features. Anything involving legal, money movement or customer data still goes back to the owner.
 
+## Owner update (2026-10-04)
+The owner has 15 resellers lined up and 2 suppliers, and asked for the platform to be made end to end ready plus guidance on delivering without looking new. Delivered: docs/LAUNCH_PLAYBOOK.md. Status: catalog, staff, API keys, audit built; orders, wallet, screens and supplier connections not built. Do not take real orders until they are (see playbook go-live checklist). Claude advised against pretending experience; the playbook frames the launch as a small founding-partner rollout.
+
 ## Open questions
-1. Which two suppliers first, and do we have credentials?
+1. Names of the two suppliers and their API documentation or credentials (needed for T-113 to T-115).
 2. Which payment gateway?
 3. Hosting provider and region?
 4. What does counsel approve for the allowed service list?
@@ -52,11 +55,12 @@ _None yet._
 
 ## Changelog of these docs
 - 2026-10-04: Created PRD, ARCHITECTURE, RULES, DESIGN, TASKS, MEMORY from the strategy document.
+- 2026-10-04: Added staff permissions, invites, API keys, audit log and service catalog (T-108, T-109, T-110, T-112) with 37 new tests and an end-to-end curl run. Invites are shown once and must be shared by the owner; email delivery is not built. Prices: integer paise, basis-point markups, rounded up, never below cost.
 - 2026-10-04: Added auth (T-106) with end-to-end curl check against a production build.
 - 2026-10-04: Started code in `panel/`. Built and tested: tenancy and RLS, ledger, theme engine, Docker/Compose/cloudflared files. Not verified: Docker image builds (no Docker daemon in the build sandbox), the GitHub Actions workflow, a real cloudflared tunnel.
 
 ## Known gaps in auth (do before real customers)
-- No per-IP rate limiting on login (only per-account lockout, which also lets someone lock a victim out for 15 minutes).
+- Login is limited to 10 tries per minute per visitor and locks an account for 15 minutes after 5 failures (which also lets someone lock a victim out for 15 minutes). The limiter is in memory, per app instance; move to Redis before running more than one instance.
 - No password reset or email verification; no passkeys yet.
 - Sessions are not revoked when a password or 2FA setting changes (no password-change feature exists yet).
 - Losing `APP_ENCRYPTION_KEY` makes stored 2FA secrets unreadable; no key rotation yet.

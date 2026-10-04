@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { getPool } from "@/lib/db/pool";
 import { login, SESSION_DAYS } from "@/lib/auth/service";
+import { clientIp, loginLimiter } from "@/lib/ratelimit";
 import { json, readJson, sameOrigin, sessionCookie, tenantFromRequest } from "@/lib/http/request";
 
 const body = z.object({
@@ -13,6 +14,9 @@ export async function POST(req: Request) {
   if (!sameOrigin(req)) return json({ error: "bad origin" }, 403);
   const tenant = await tenantFromRequest(req);
   if (!tenant) return json({ error: "unknown site" }, 404);
+  if (!loginLimiter.allow(`login:${tenant.id}:${clientIp(req)}`)) {
+    return json({ error: "too many attempts, try again in a minute" }, 429, { "Retry-After": "60" });
+  }
   const data = await readJson(req, body);
   if (!data) return json({ error: "invalid request" }, 400);
 
