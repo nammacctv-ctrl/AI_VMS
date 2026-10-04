@@ -40,6 +40,8 @@ Starting palette (adjustable; must pass contrast): primary indigo `#4F46E5`, suc
 | Light, dark or auto mode | Security-related UI (auth, step-up prompts) |
 | Landing blocks (hero, pricing, FAQ, contact) from approved set | Any custom script or CSS injection |
 
+> Built (2026-10-04): the Branding screen implements this table. Tenants can change name, logo, accent colour, light/dark/auto, font (system stacks), corners and spacing. Landing blocks and custom fonts are not built.
+
 ## 5. Presets
 - **Light**: default, high legibility.
 - **Dark**: true dark surfaces, same accent logic.

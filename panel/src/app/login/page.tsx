@@ -1,6 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
+import { BrandMark } from "@/components/Brand";
 import { Alert, Field } from "@/components/ui";
 import { api, ApiError } from "@/lib/ui/api";
 
@@ -28,6 +29,7 @@ export default function Login() {
 
   return (
     <div className="center">
+      <div style={{ marginBottom: "1rem" }}><BrandMark size={56} /></div>
       <h1>Sign in</h1>
       <form onSubmit={submit} className="card" noValidate>
         {error && <Alert>{error}</Alert>}

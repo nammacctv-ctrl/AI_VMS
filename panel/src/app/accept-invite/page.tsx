@@ -1,6 +1,7 @@
 "use client";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState, type FormEvent } from "react";
+import { BrandMark } from "@/components/Brand";
 import { Alert, Field } from "@/components/ui";
 import { api, ApiError } from "@/lib/ui/api";
 
@@ -44,6 +45,7 @@ function Form() {
 export default function AcceptInvite() {
   return (
     <div className="center">
+      <div style={{ marginBottom: "1rem" }}><BrandMark size={56} /></div>
       <h1>Accept your invitation</h1>
       <Suspense fallback={null}><Form /></Suspense>
     </div>

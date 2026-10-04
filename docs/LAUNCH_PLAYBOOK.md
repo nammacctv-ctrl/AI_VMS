@@ -24,7 +24,8 @@ Say it like this: *"We are a new platform from an established company. We are st
 | API keys for resellers who want to connect their own bots | Billing for your own subscriptions |
 | Activity log of every important action | |
 | Screens for resellers (phone and desktop) and for you: order queue, customers and credit, prices, activity log | A real server, a domain, backups |
-| Deployment files for a VPS | Branding (your logo and colours) |
+| Branding: your business name, logo, colours and look, with live preview and one-click restore (no files, no developer) | |
+| Deployment files for a VPS | |
 
 **Do not take real customer money or real orders until the "not ready" column is built and tested.** Next build steps, in order: (1) the two supplier connections, (2) password reset, backups and putting it on a real server, (3) bulk ordering and notifications.
 
@@ -32,12 +33,13 @@ Say it like this: *"We are a new platform from an established company. We are st
 
 Have these ready. Each one makes a new business look established.
 
-1. **A domain and email**, for example `panel.yourbrand.in` and `support@yourbrand.in`. Not a Gmail address.
-2. **A one-page price list** per customer group (Gold, Standard) with delivery times written as ranges ("usually 10 to 60 minutes"), never a promise of exact minutes.
-3. **Terms of service, refund policy and privacy policy.** Ask your lawyer. These also answer the legal question about which services you may list. Do not skip this.
-4. **GST-registered invoices** with your company name, address and GSTIN.
-5. **A support promise you can keep**, for example "Replies within 2 hours, 10am to 10pm, Monday to Saturday". Keep it small and keep it.
-6. **A WhatsApp support group** per cohort of resellers, and a named person who answers.
+1. **A logo.** Upload it under Branding (PNG, JPG or WebP, under 200 KB, ideally wide with a transparent background) and pick your brand colour. This single step makes the panel look like *your* company.
+2. **A domain and email**, for example `panel.yourbrand.in` and `support@yourbrand.in`. Not a Gmail address.
+3. **A one-page price list** per customer group (Gold, Standard) with delivery times written as ranges ("usually 10 to 60 minutes"), never a promise of exact minutes.
+4. **Terms of service, refund policy and privacy policy.** Ask your lawyer. These also answer the legal question about which services you may list. Do not skip this.
+5. **GST-registered invoices** with your company name, address and GSTIN.
+6. **A support promise you can keep**, for example "Replies within 2 hours, 10am to 10pm, Monday to Saturday". Keep it small and keep it.
+7. **A WhatsApp support group** per cohort of resellers, and a named person who answers.
 
 ## Rollout in three waves
 

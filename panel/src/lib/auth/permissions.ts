@@ -5,6 +5,7 @@ export const PERMISSIONS = [
   "catalog.read", "catalog.cost", "catalog.manage",
   "orders.create", "orders.read", "orders.manage",
   "wallet.read", "wallet.manage",
+  "brand.manage",
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 

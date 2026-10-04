@@ -11,7 +11,7 @@ Multi-tenant reseller panel and theme platform. See `../PRD.md`, `../ARCHITECTUR
 - `src/lib/audit.ts`: append-only activity log written in the same transaction as each change.
 - `src/lib/catalog`: suppliers, services (with cost), customer groups, per-service price overrides, price lists (resellers never see cost).
 - `src/lib/ledger`: idempotent balanced postings, derived balances.
-- `src/lib/themes`: token schema, contrast checks, safe CSS compiler.
+- `src/lib/themes`: token schema, contrast checks, safe CSS compiler. `src/lib/brand`: per-panel name, logo (PNG/JPG/WebP only), versioned themes with restore, and the per-request loader that applies a panel's look. Screen: `/admin/branding`.
 - `src/app`: screens (`/login`, `/signup`, `/accept-invite`, reseller area `/portal/*`, staff area `/admin/*`), JSON API under `/api`, `/api/health`, `/themes/preview`. Screens are client pages that call the same authenticated API anyone else can use.
 - `e2e/`: `npm run e2e` drives a real Chromium through the whole product (signup, catalog, invite, credit, order, complete, fail and refund, two-factor, API key) against a throwaway database. Needs Postgres and a built app.
 - `Dockerfile`, `docker-compose.yml`, `deploy/README.md`: VPS deployment with a cloudflared tunnel.
@@ -26,4 +26,4 @@ npm run dev
 Try `/themes/preview?preset=trader&accent=%23be185d`.
 
 ## Not built yet
-Supplier connections, password reset, email, bulk ordering, notifications, tenant branding, passkeys, billing, orders, supplier adapters, billing, tenant admin UI. See `../TASKS.md`.
+Supplier connections, password reset, email, bulk ordering, notifications, passkeys, billing, orders, supplier adapters, billing, tenant admin UI. See `../TASKS.md`.

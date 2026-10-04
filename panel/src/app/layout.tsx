@@ -1,24 +1,28 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import type { ReactNode } from "react";
-import { compileTheme } from "@/lib/themes/compile";
-import { defaultTheme } from "@/lib/themes/presets";
+import { BrandProvider } from "@/components/Brand";
+import { brandForHost } from "@/lib/brand/server";
 import "./globals.css";
 
-export const metadata: Metadata = {
-  title: "Namma Panel",
-  description: "Reseller panel platform by Namma CCTV Private Limited",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const h = await headers();
+  const brand = await brandForHost(h.get("x-host-kind"), h.get("x-host-key"));
+  return { title: brand.name ?? "Namma Panel", description: brand.name ? `${brand.name} reseller panel` : "Reseller panel platform by Namma CCTV Private Limited" };
+}
 
-export default function RootLayout({ children }: { children: ReactNode }) {
-  const result = compileTheme(defaultTheme("light"));
-  const css = result.ok ? result.css : "";
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  const h = await headers();
+  const brand = await brandForHost(h.get("x-host-kind"), h.get("x-host-key"));
   return (
     <html lang="en">
       <head>
-        {/* css is built only from validated hex values and fixed tables */}
-        <style dangerouslySetInnerHTML={{ __html: css }} />
+        {/* css is built by compileTheme from validated values only; no tenant text reaches it */}
+        <style dangerouslySetInnerHTML={{ __html: brand.css }} />
       </head>
-      <body>{children}</body>
+      <body>
+        <BrandProvider value={{ name: brand.name, logoUrl: brand.logoUrl }}>{children}</BrandProvider>
+      </body>
     </html>
   );
 }

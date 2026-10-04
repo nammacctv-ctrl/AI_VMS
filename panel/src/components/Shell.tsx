@@ -3,6 +3,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { api, ApiError } from "@/lib/ui/api";
+import { BrandMark } from "./Brand";
 import { Loading } from "./ui";
 
 export interface Me {
@@ -24,6 +25,7 @@ const NAV: NavItem[] = [
   { href: "/admin", label: "Order queue", show: (m) => can(m, "orders.manage") },
   { href: "/admin/customers", label: "Customers", show: (m) => can(m, "staff.read") },
   { href: "/admin/catalog", label: "Services & prices", show: (m) => can(m, "catalog.manage") },
+  { href: "/admin/branding", label: "Branding", show: (m) => can(m, "brand.manage") },
   { href: "/admin/audit", label: "Activity log", show: (m) => can(m, "audit.read") },
   { href: "/portal", label: "Dashboard", show: (m) => can(m, "orders.read") },
   { href: "/portal/order", label: "New order", show: (m) => can(m, "orders.create") },
@@ -35,7 +37,7 @@ const NAV: NavItem[] = [
 
 /** Pages that need a permission. The API enforces this too; this just avoids showing a broken screen. */
 const PAGE_PERMISSION: [string, string][] = [
-  ["/admin/customers", "staff.read"], ["/admin/catalog", "catalog.manage"], ["/admin/audit", "audit.read"], ["/admin", "orders.manage"],
+  ["/admin/customers", "staff.read"], ["/admin/branding", "brand.manage"], ["/admin/catalog", "catalog.manage"], ["/admin/audit", "audit.read"], ["/admin", "orders.manage"],
 ];
 
 export function Shell({ children }: { children: ReactNode }) {
@@ -60,7 +62,7 @@ export function Shell({ children }: { children: ReactNode }) {
     <MeContext.Provider value={me}>
       <div className="shell">
         <nav className="rail" aria-label="Main">
-          <div className="brand">{me.tenant.name}</div>
+          <div className="brand"><BrandMark /></div>
           {items.map((n) => (
             <Link key={n.href} href={n.href} prefetch={false} className="nav" aria-current={current(n.href) ? "page" : undefined}>{n.label}</Link>
           ))}

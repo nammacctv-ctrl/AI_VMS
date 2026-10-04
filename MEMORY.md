@@ -55,6 +55,7 @@ _None yet._
 
 ## Changelog of these docs
 - 2026-10-04: Created PRD, ARCHITECTURE, RULES, DESIGN, TASKS, MEMORY from the strategy document.
+- 2026-10-04: Added branding (T-119, T-120): 21 new tests and 9 new browser steps. Found and fixed through the browser run: a per-process cache that pages and API routes did not share, and the tab title ignoring the panel name.
 - 2026-10-04: Added all screens (T-121, most of T-122), the e2e journey and fixes found by it.
 - 2026-10-04: Added reseller credit (staff-managed) and orders with manual fulfilment (T-116): 108 tests, two real race tests, 16-step HTTP walkthrough. Lesson: row-locking an account needs UPDATE rights the append-only ledger role must not have; use advisory locks instead.
 - 2026-10-04: Added staff permissions, invites, API keys, audit log and service catalog (T-108, T-109, T-110, T-112) with 37 new tests and an end-to-end curl run. Invites are shown once and must be shared by the owner; email delivery is not built. Prices: integer paise, basis-point markups, rounded up, never below cost.
@@ -71,7 +72,12 @@ _None yet._
 ## Screens (built 2026-10-04)
 - Reseller area `/portal/*` and staff area `/admin/*`; the menu and each page follow the person's permissions, and the API enforces them again. Tables on the reseller side and the order queue turn into stacked cards on phones. Staff screens for customers, catalog and activity log still scroll sideways on a phone.
 - Verified with a real Chromium run (`npm run e2e`, 23 steps, desktop and 390px phone, zero console errors) and by eye on screenshots.
-- Not built: tenant branding/theme editor (everything uses the default light theme), Hindi or other languages, email, password reset, notifications, in-app help, accessibility audit with a screen reader (keyboard and labels are in place, but only checked by automated clicks).
+- Not built: Hindi or other languages, email, password reset, notifications, in-app help, accessibility audit with a screen reader (keyboard and labels are in place, but only checked by automated clicks).
+
+## Branding (built 2026-10-04)
+- Owner/admin (`brand.manage`) set business name, logo (PNG/JPG/WebP up to 200 KB, stored in the database, never SVG), brand colour, light/dark/automatic, font (system stacks only), corners, spacing. Live preview in the browser; Publish stores a new immutable version; "Use this look" republishes an old one as a new version. Resellers see the branded login page, menu and colours.
+- Safety: a theme is validated data (hex colour, fixed lists), compiled to CSS on the server; no tenant text reaches CSS. The server re-validates on publish (browser preview is only a preview). Logo is checked by its real first bytes, served with nosniff and a sandbox CSP. Theme versions cannot be edited or deleted, even by the database owner; the app role may now rename a panel but not change its address, plan or status.
+- Known limits: the per-request brand cache is in memory (15 s) and invalidated through `globalThis`; with more than one app instance a change can take up to 15 s to appear on the others. Branding applies to panel pages only: invitation and notification emails (not built yet) will need it too. Custom domains are resolved but not yet provisioned with TLS (T-202). No logo cropping/resizing; logos are shown at up to 36 px (menu) and 56 px (login) high.
 
 ## Known gaps in auth (do before real customers)
 - Login is limited to 10 tries per minute per visitor and locks an account for 15 minutes after 5 failures (which also lets someone lock a victim out for 15 minutes). The limiter is in memory, per app instance; move to Redis before running more than one instance.
@@ -83,6 +89,8 @@ _None yet._
 - Test hygiene: `npx next start` leaves the real `next-server` running when its wrapper is killed, so a later run silently talked to a stale build on the same port and failed in confusing ways. `e2e/run.sh` now starts the server binary directly and kills its children; check with `pgrep -x next-server`.
 - Redirecting every unauthenticated request to /login also redirected Next's background prefetch requests, which then 404ed. The proxy now redirects only real page loads.
 - Menu highlighting by `startsWith` lit up "New order" and "My orders" together (`/portal/order` is a prefix of `/portal/orders`); fixed with a path-segment match.
+- Pages and route handlers are separate bundles: a module-level in-memory cache is NOT shared between them. Use globalThis (or a real shared store) for anything a route must invalidate for pages.
+- Browsers may request /favicon.ico on their own; without a route it 404ed intermittently and made the browser journey flaky (1 in ~3 runs). Fixed with a redirect route; verified 6/6 clean runs. When a test flakes, find the cause (print the URL) instead of retrying.
 - A table with nine columns clipped the action buttons at normal desktop width; fewer, stacked columns fixed it. Always look at the screenshot, not just the pass/fail.
 - A first theme compiler lightened the brand accent for link readability and used that same color for button backgrounds, which broke button-label contrast on dark surfaces. Fixed by separating `--accent` (brand) from `--accent-text` (adjusted), and added a sweep test over 216 accent colors times 3 presets.
 - `FORCE ROW LEVEL SECURITY` on `tenants` blocks the SECURITY DEFINER lookup functions, so `tenants` and `tenant_domains` are not forced; the app role is not the owner, so RLS still applies to it.

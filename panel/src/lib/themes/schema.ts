@@ -17,8 +17,6 @@ export const themeDocumentSchema = z.object({
   font: z.enum(["system", "humanist", "serif", "mono"]).default("system"),
   radius: z.enum(["none", "sm", "md", "lg"]).default("md"),
   density: z.enum(["comfortable", "compact", "trader"]).default("comfortable"),
-  /** https only; rendered as an <img>, never injected into CSS. */
-  logoUrl: z.string().url().max(300).refine((u) => u.startsWith("https://"), "logo must be https").optional(),
 });
 
 export type ThemeDocument = z.infer<typeof themeDocumentSchema>;

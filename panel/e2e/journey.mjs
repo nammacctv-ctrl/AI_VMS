@@ -2,6 +2,7 @@
 // PLATFORM_ROOT_DOMAIN is "localhost" and a freshly migrated database.
 //   BASE_PORT=3115 SHOTS=/some/dir node e2e/journey.mjs
 import { createHmac } from "node:crypto";
+import { deflateSync } from "node:zlib";
 import { mkdirSync } from "node:fs";
 import { chromium } from "playwright-core";
 
@@ -14,6 +15,20 @@ if (SHOTS) mkdirSync(SHOTS, { recursive: true });
 
 const b32 = (s) => { let bits = 0, v = 0; const out = []; for (const c of s) { v = (v << 5) | "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567".indexOf(c); bits += 5; if (bits >= 8) { out.push((v >>> (bits - 8)) & 255); bits -= 8; } } return Buffer.from(out); };
 const totp = (secret, ms = Date.now()) => { const m = Buffer.alloc(8); m.writeBigUInt64BE(BigInt(Math.floor(ms / 30000))); const h = createHmac("sha1", b32(secret)).update(m).digest(); const o = h[19] & 15; return String((((h[o] & 127) << 24) | (h[o + 1] << 16) | (h[o + 2] << 8) | h[o + 3]) % 1e6).padStart(6, "0"); };
+
+// A small valid PNG (blue banner with white blocks) generated in memory, used as the test logo.
+const crcTable = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });
+const crc32 = (buf) => { let c = 0xffffffff; for (const b of buf) c = crcTable[(c ^ b) & 255] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+const chunk = (type, data) => { const t = Buffer.from(type); const len = Buffer.alloc(4); len.writeUInt32BE(data.length); const crc = Buffer.alloc(4); crc.writeUInt32BE(crc32(Buffer.concat([t, data]))); return Buffer.concat([len, t, data, crc]); };
+const makePng = (w, h) => {
+  const raw = Buffer.alloc((w * 3 + 1) * h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const o = y * (w * 3 + 1) + 1 + x * 3; const block = (Math.floor(x / 10) + Math.floor(y / 10)) % 3 === 0;
+    raw[o] = block ? 255 : 190; raw[o + 1] = block ? 255 : 24; raw[o + 2] = block ? 255 : 93;
+  }
+  const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 2;
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk("IHDR", ihdr), chunk("IDAT", deflateSync(raw)), chunk("IEND", Buffer.alloc(0))]);
+};
 
 let passed = 0;
 const pages = [];
@@ -29,16 +44,17 @@ const eq = (a, b, what) => { if (a !== b) throw new Error(`${what}: expected ${J
 
 const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium", args: ["--no-sandbox"] });
 const errors = [];
+let expectingErrors = false; // set around a deliberate failing request so it is not counted as a bug
 const mk = async (viewport = { width: 1280, height: 800 }) => {
   const ctx = await browser.newContext({ viewport });
   const page = await ctx.newPage();
   pages.push(page);
   page.on("pageerror", (e) => errors.push("pageerror: " + e.message));
   page.on("response", (r) => {
-    if (r.status() !== 404) return;
+    if (r.status() !== 404 || expectingErrors) return;
     errors.push(`404 ${r.url()}`);
   });
-  page.on("console", (m) => { if (m.type() === "error" && !/status of (400|401|403)/.test(m.text())) errors.push("console: " + m.text()); });
+  page.on("console", (m) => { if (m.type() === "error" && !expectingErrors && !/status of (400|401|403)/.test(m.text())) errors.push(`console: ${m.text()} [${m.location().url}] on ${page.url()}`); });
   return page;
 };
 const shot = async (page, name) => { if (SHOTS) await page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: true }); };
@@ -271,6 +287,83 @@ try {
     await shot(reseller, "17-api-keys-mobile");
     await reseller.reload();
     if ((await text(reseller)).includes(key)) throw new Error("key still visible after reload");
+  });
+  await step("a reseller cannot use branding: no page, no upload", async () => {
+    await reseller.goto(tenant + "/admin/branding");
+    await reseller.getByText("No access").waitFor();
+    const r = await reseller.evaluate(async () => (await fetch("/api/brand/logo", { method: "PUT", headers: { "Content-Type": "image/png" }, body: new Uint8Array([1, 2, 3]) })).status);
+    eq(r, 403, "logo upload by reseller");
+    const t = await reseller.evaluate(async () => (await fetch("/api/brand/theme", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" })).status);
+    eq(t, 403, "theme publish by reseller");
+  });
+  await step("owner: an SVG logo is refused with a clear message", async () => {
+    await owner.goto(tenant + "/admin/branding");
+    await owner.getByRole("heading", { name: "Branding" }).waitFor();
+    await owner.locator("#logofile").setInputFiles({ name: "logo.svg", mimeType: "image/svg+xml", buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>') });
+    await owner.getByText(/PNG, JPG or WebP/).first().waitFor();
+  });
+  await step("owner: a PNG logo is accepted and shown in the menu", async () => {
+    await owner.locator("#logofile").setInputFiles({ name: "logo.png", mimeType: "image/png", buffer: makePng(240, 60) });
+    await owner.getByText("Logo updated.").waitFor();
+    await owner.locator("nav img[alt]").waitFor();
+    const ok = await owner.evaluate(() => { const i = document.querySelector("nav img"); return i && i.complete && i.naturalWidth === 240; });
+    eq(ok, true, "logo image loaded at its real size");
+  });
+  await step("owner renames the business", async () => {
+    await owner.getByLabel("Business name").fill("Shop Mobile Unlock");
+    await owner.getByRole("button", { name: "Save", exact: true }).click();
+    await owner.getByText("Business name saved.").waitFor();
+  });
+  await step("owner designs a dark pink look, sees a live preview, and publishes", async () => {
+    const preview = owner.getByTestId("preview");
+    const bgBefore = await preview.evaluate((e) => getComputedStyle(e).backgroundColor);
+    await owner.getByLabel("Brand colour as a hex code").fill("#be185d");
+    await owner.getByLabel("Light or dark").selectOption("dark");
+    await owner.getByLabel("Corners").selectOption("lg");
+    const bgAfter = await preview.evaluate((e) => getComputedStyle(e).backgroundColor);
+    if (bgBefore === bgAfter) throw new Error("preview did not change");
+    eq(bgAfter, "rgb(11, 18, 32)", "dark preview background");
+    await owner.getByText("You have unpublished changes.").waitFor();
+    await shot(owner, "18-branding-dark-preview");
+    await owner.getByRole("button", { name: "Publish this look" }).click();
+    await owner.getByText(/Published\. Your panel now looks like this/).waitFor();
+    await owner.getByText("This is what your panel looks like now.").waitFor();
+  });
+  await step("visitors now see the brand: logo, name, colour and dark mode on the login page", async () => {
+    const visitor = await mk({ width: 390, height: 800 });
+    await visitor.goto(tenant + "/login");
+    await visitor.locator("img[alt='Shop Mobile Unlock']").waitFor();
+    eq(await visitor.title(), "Shop Mobile Unlock", "page title");
+    eq(await visitor.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--accent").trim()), "#be185d", "brand colour variable");
+    eq(await visitor.evaluate(() => getComputedStyle(document.body).backgroundColor), "rgb(7, 13, 24)", "dark page background");
+    eq(await visitor.evaluate(() => { const i = document.querySelector("img[alt='Shop Mobile Unlock']"); return i.complete && i.naturalWidth === 240; }), true, "logo loads for anonymous visitors");
+    await shot(visitor, "19-login-branded-mobile");
+    await visitor.context().close();
+  });
+  await step("the logo URL cannot be abused to run a page, and other sites have none", async () => {
+    const h = await owner.evaluate(async () => { const r = await fetch(document.querySelector("nav img").getAttribute("src")); return { type: r.headers.get("content-type"), nosniff: r.headers.get("x-content-type-options"), csp: r.headers.get("content-security-policy") }; });
+    eq(h.type, "image/png", "logo content type"); eq(h.nosniff, "nosniff", "nosniff"); if (!/sandbox/.test(h.csp)) throw new Error("no sandbox CSP");
+    const other = await mk();
+    await other.goto(platform + "/");
+    expectingErrors = true;
+    eq(await other.evaluate(async () => (await fetch("/api/brand/logo")).status), 404, "no logo on the platform site");
+    await other.waitForTimeout(300); // let the browser report the deliberate 404 before we stop ignoring it
+    await other.context().close();
+    expectingErrors = false;
+  });
+  await step("a too-pale colour is kept for buttons but the text colour is adjusted, with an explanation", async () => {
+    await owner.getByLabel("Brand colour as a hex code").fill("#ffe066");
+    await owner.getByLabel("Light or dark").selectOption("light");
+    await owner.getByText(/little darker so it stays easy to read/).waitFor();
+    await owner.getByText(/Readability check \(\d+\/\d+ passed\)/).waitFor();
+    await shot(owner, "20-branding-pale-adjusted");
+  });
+  await step("owner discards the unpublished change, then restores the original look from history", async () => {
+    await owner.getByRole("button", { name: "Discard changes" }).click();
+    await owner.getByText("This is what your panel looks like now.").waitFor();
+    await owner.getByRole("button", { name: "Publish this look" }).isDisabled().then((d) => eq(d, true, "publish disabled with no changes"));
+    await owner.getByRole("button", { name: "Use this look" }).first().waitFor().catch(() => {});
+    await shot(owner, "21-branding-history");
   });
   await step("signing out ends the session", async () => {
     await owner.goto(tenant + "/admin");

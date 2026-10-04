@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compileTheme } from "@/lib/themes/compile";
+import { compileTheme, scopeCss } from "@/lib/themes/compile";
 import { contrastRatio } from "@/lib/themes/contrast";
 import { defaultTheme } from "@/lib/themes/presets";
 
@@ -57,8 +57,6 @@ describe("compileTheme", () => {
       { ...defaultTheme(), accent: "red" },
       { ...defaultTheme(), accent: "#fff;} body{display:none" },
       { ...defaultTheme(), font: "Comic Sans" },
-      { ...defaultTheme(), logoUrl: "javascript:alert(1)" },
-      { ...defaultTheme(), logoUrl: "http://insecure.example/logo.png" },
       { ...defaultTheme(), version: 2 },
       "not an object",
     ];
@@ -68,5 +66,26 @@ describe("compileTheme", () => {
   it("never lets tenant strings reach the CSS", () => {
     const r = compileTheme({ ...defaultTheme(), name: "</style><script>x</script>" });
     expect(r.ok && !r.css.includes("script")).toBe(true);
+  });
+});
+
+describe("brand preview helpers", () => {
+  it("reports when the brand colour had to be adjusted for readability", () => {
+    const pale = compileTheme({ ...defaultTheme("light"), mode: "light", accent: "#ffe066" });
+    const dark = compileTheme({ ...defaultTheme("light"), mode: "light", accent: "#312e81" });
+    expect(pale.ok && pale.adjusted).toBe(true);
+    expect(dark.ok && dark.adjusted).toBe(false);
+  });
+  it("scopes compiled css to a container, including the dark media query", () => {
+    const r = compileTheme({ ...defaultTheme("light"), mode: "auto" });
+    if (!r.ok) throw new Error("should compile");
+    const scoped = scopeCss(r.css, ".preview");
+    expect(scoped).not.toContain(":root");
+    expect(scoped).toContain(".preview{");
+    expect(scoped).toContain("@media (prefers-color-scheme:dark){.preview{");
+  });
+  it("drops unknown keys, so stored themes only hold known settings", () => {
+    const r = compileTheme({ ...defaultTheme("light"), logoUrl: "https://x.test/a.png", evil: "<script>" });
+    expect(r.ok && Object.keys(r.theme).sort()).toEqual(["accent", "density", "font", "mode", "name", "preset", "radius", "version"]);
   });
 });
