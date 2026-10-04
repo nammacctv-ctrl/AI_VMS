@@ -14,17 +14,17 @@ Phases match the roadmap in [docs/PLATFORM_STRATEGY.md](docs/PLATFORM_STRATEGY.m
 - [ ] T-008 Choose payment gateway
 
 ## Phase 1: Core platform (weeks 4-12)
-- [ ] T-101 Repo scaffold: Next.js, TypeScript strict, lint, format, test runner
-- [ ] T-102 CI: lint, typecheck, unit tests, dependency/SAST/secret scans
-- [ ] T-103 Postgres setup with migrations; app role without BYPASSRLS
-- [ ] T-104 Tenancy: tenants, domains, host resolution middleware, `SET LOCAL app.tenant_id`
-- [ ] T-105 RLS policies and cross-tenant isolation test harness
+- [x] T-101 Repo scaffold: Next.js, TypeScript strict, lint, format, test runner
+- [~] T-102 CI: lint, typecheck, unit tests, dependency/SAST/secret scans
+- [x] T-103 Postgres setup with migrations; app role without BYPASSRLS
+- [x] T-104 Tenancy: tenants, domains, host resolution middleware, `SET LOCAL app.tenant_id`
+- [x] T-105 RLS policies and cross-tenant isolation test harness
 - [ ] T-106 Identity: signup, login, sessions, TOTP
 - [ ] T-107 Passkeys (WebAuthn)
 - [ ] T-108 Staff roles and permissions
 - [ ] T-109 API keys with scopes and rate limits
 - [ ] T-110 Audit log
-- [ ] T-111 Ledger: accounts, entries, idempotency, nightly reconciliation job
+- [~] T-111 Ledger: accounts, entries, idempotency, nightly reconciliation job
 - [ ] T-112 Catalog: supplier service sync, markup, customer groups, price lists
 - [ ] T-113 Supplier adapter interface, wrapper (timeout, retry, circuit breaker, health score)
 - [ ] T-114 Supplier adapter #1
@@ -32,14 +32,14 @@ Phases match the roadmap in [docs/PLATFORM_STRATEGY.md](docs/PLATFORM_STRATEGY.m
 - [ ] T-116 Orders: state machine, queue worker, refunds
 - [ ] T-117 Bulk ordering: paste and CSV with row validation
 - [ ] T-118 Webhooks: outbox, HMAC signing, retries
-- [ ] T-119 Theme engine v1: schema, validation, CSS compile, presets, contrast check
+- [~] T-119 Theme engine v1: schema, validation, CSS compile, presets, contrast check
 - [ ] T-120 Theme editor UI with preview and rollback
 - [ ] T-121 Reseller UI: dashboard, new order, orders, order detail
 - [ ] T-122 Tenant admin UI: services/pricing, customers, suppliers, settings
 - [ ] T-123 Subscription billing via gateway and GST invoices
 - [ ] T-124 OpenAPI 3.1 spec and docs site
 - [ ] T-125 Observability: traces, logs, error tracking, supplier-health dashboard
-- [ ] T-126 Staging and production infrastructure as code
+- [~] T-126 Staging and production infrastructure as code
 
 ## Phase 2: Compatibility and growth features (weeks 13-18)
 - [ ] T-201 Dhru-compatible API shim (public docs only)
@@ -64,4 +64,4 @@ Phases match the roadmap in [docs/PLATFORM_STRATEGY.md](docs/PLATFORM_STRATEGY.m
 - [ ] T-405 Optional signed self-hosted tier
 
 ## Next up
-Start with T-101, then T-102, T-103, T-104, T-105. Do not begin T-111 or T-116 until T-105 passes.
+T-101, T-103, T-104 and T-105 are done (code in `panel/`, 24 tests passing). Next: T-106 (auth), T-107, T-108, then T-112 (catalog). T-111 needs the nightly reconciliation job; T-102 needs the CI workflow to run once on GitHub; T-119 still needs the editor UI (T-120); T-126 has Docker/Compose files but the images have not been built or deployed yet.

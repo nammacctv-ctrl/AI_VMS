@@ -1,0 +1,31 @@
+name: panel-ci
+on:
+  push:
+    paths: ["panel/**", ".github/workflows/panel-ci.yml"]
+  pull_request:
+    paths: ["panel/**", ".github/workflows/panel-ci.yml"]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: panel } }
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_PASSWORD: postgres }
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: panel/package-lock.json }
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+        env:
+          TEST_ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
+      - run: npm run build
+      - run: npm audit --omit=dev --audit-level=high

@@ -125,7 +125,13 @@ See [DESIGN.md](DESIGN.md) for the token list.
 | RPO / RTO | 5 minutes / 1 hour |
 | Order dispatch latency (queue to supplier call) | under 5 s p95 |
 
-## 14. Future-ready options
+## 14. Deployment models (container-first)
+One set of OCI images (`app`, `migrate`) supports both models:
+1. **Managed cloud (default product):** we run one multi-tenant stack; tenants get subdomains or custom domains.
+2. **VPS install:** Docker Compose on DigitalOcean, Linode or Hetzner with a cloudflared tunnel (`panel/docker-compose.yml`, `panel/deploy/README.md`). No inbound web ports; the app container is non-root, read-only, with all capabilities dropped.
+Self-hosted installs must use signed prebuilt images with a minimum-version check so patches are not optional (planned). Kubernetes becomes an option later with no code change. PHP 8.3 is not part of the core; an isolated sidecar is possible if legacy plugin compatibility is required (see MEMORY.md).
+
+## 15. Future-ready options
 - Per-tenant dedicated database for large tenants.
 - Event streaming (NATS/Kafka) if queue throughput demands.
 - Optional signed-container self-hosted tier for enterprise.

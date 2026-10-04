@@ -19,6 +19,10 @@ Living log of decisions, facts and lessons. Read before starting work; append wh
 | 2026-10-04 | Themes are token data, never tenant code | Upgrade safety and security | Proposed default |
 | 2026-10-04 | Dhru-compatible API shim built from public docs only | Migration wedge without legal risk | Proposed default |
 | 2026-10-04 | India-region hosting | Latency and data residency | Proposed default |
+| 2026-10-04 | Deployment target is a VPS (DigitalOcean, Linode, Hetzner) with Docker and a cloudflared tunnel; no inbound web ports | Owner request; cheap, portable, no cloud lock-in | Owner decision |
+| 2026-10-04 | Container-first: the same OCI images run as (a) our managed multi-tenant cloud and (b) a Docker Compose stack on a customer or reseller VPS | Future-ready: Kubernetes later without code changes; keeps both sales models open | Proposed default |
+| 2026-10-04 | Core stays TypeScript/Next.js, not PHP. PHP 8.3 only as an optional isolated sidecar if customers need legacy Dhru-style plugins | Docker/cloudflared work with any stack; rewriting in PHP gives up the shared tested core | Needs owner confirmation |
+| 2026-10-04 | Self-hosted installs must pull signed prebuilt images and enforce a minimum version; no hand-edited copies | Keeps the patch advantage of SaaS even on customer servers | Planned (not built) |
 
 ## Assumptions (unverified)
 - Pricing tiers: Starter ₹1,999, Pro ₹4,999, Business ₹12,999 per month.
@@ -26,6 +30,7 @@ Living log of decisions, facts and lessons. Read before starting work; append wh
 - 100 panels at about ₹5,000 average is roughly ₹5 lakh per month; this is a target, not a forecast.
 
 ## Open questions
+0. What is PHP 8.3 needed for? (Run legacy Dhru-style plugins? Customer familiarity? Hosting restrictions?) The answer decides whether a PHP sidecar is built at all.
 1. Which two suppliers first, and do we have credentials?
 2. Which payment gateway?
 3. Hosting provider and region?
@@ -45,3 +50,8 @@ _None yet._
 
 ## Changelog of these docs
 - 2026-10-04: Created PRD, ARCHITECTURE, RULES, DESIGN, TASKS, MEMORY from the strategy document.
+- 2026-10-04: Started code in `panel/`. Built and tested: tenancy and RLS, ledger, theme engine, Docker/Compose/cloudflared files. Not verified: Docker image builds (no Docker daemon in the build sandbox), the GitHub Actions workflow, a real cloudflared tunnel.
+
+## Lessons learned (code)
+- A first theme compiler lightened the brand accent for link readability and used that same color for button backgrounds, which broke button-label contrast on dark surfaces. Fixed by separating `--accent` (brand) from `--accent-text` (adjusted), and added a sweep test over 216 accent colors times 3 presets.
+- `FORCE ROW LEVEL SECURITY` on `tenants` blocks the SECURITY DEFINER lookup functions, so `tenants` and `tenant_domains` are not forced; the app role is not the owner, so RLS still applies to it.

@@ -1,0 +1,63 @@
+# One VPS (DigitalOcean, Linode, Hetzner, ...) running the whole stack.
+# Nothing publishes a port to the internet: public traffic arrives only through
+# the Cloudflare tunnel, so the server needs no open inbound web ports.
+#
+#   cp .env.example .env   # fill in values (see deploy/README.md)
+#   docker compose up -d
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: panel_owner
+      POSTGRES_PASSWORD: ${DB_OWNER_PASSWORD:?set DB_OWNER_PASSWORD}
+      POSTGRES_DB: panel
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U panel_owner -d panel"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [internal]
+
+  migrate:
+    image: ${PANEL_IMAGE_MIGRATE:-namma-panel-migrate:local}
+    build: { context: ., target: migrate }
+    depends_on:
+      db: { condition: service_healthy }
+    environment:
+      MIGRATE_DATABASE_URL: postgres://panel_owner:${DB_OWNER_PASSWORD}@db:5432/panel
+      APP_DB_PASSWORD: ${DB_APP_PASSWORD:?set DB_APP_PASSWORD}
+    restart: "no"
+    networks: [internal]
+
+  app:
+    image: ${PANEL_IMAGE_APP:-namma-panel-app:local}
+    build: { context: ., target: app }
+    restart: unless-stopped
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    environment:
+      DATABASE_URL: postgres://panel_login:${DB_APP_PASSWORD}@db:5432/panel
+      PLATFORM_ROOT_DOMAIN: ${PLATFORM_ROOT_DOMAIN:?set PLATFORM_ROOT_DOMAIN}
+    read_only: true
+    tmpfs: [/tmp, /app/.next/cache]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    networks: [internal]
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?set CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on: [app]
+    networks: [internal]
+
+networks:
+  internal: {}
+
+volumes:
+  dbdata: {}
