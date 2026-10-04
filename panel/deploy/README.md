@@ -43,13 +43,13 @@ docker compose exec backup sh /deploy/restore-test.sh
 ```
 You want to see `RESTORE CHECK PASSED`. It also checks that the money records still add up.
 
-**If the server is lost:** make a new server, follow "First install" with the same `.env` values, then restore the newest backup into the new database:
+**If the server is lost:** make a new server and follow "First install" with the same `.env` values, but stop after step 2. Then, in this order (the database structure and logins must exist before the restore; this order was tested):
 ```
-docker compose up -d db
+docker compose up -d db migrate
 docker compose exec -T db pg_restore --clean --if-exists --no-owner -U panel_owner -d panel < backups/panel-YYYYMMDDTHHMMSSZ.dump
 docker compose up -d
 ```
-(Do a practice run of this on a spare server before you ever need it.)
+Then check `curl https://yourdomain.com/api/health` and sign in to one panel. Do a practice run of this on a spare server before you ever need it, and bring the newest backup from your off-server copy.
 
 ## Updating
 `git pull && docker compose up -d --build`. Take a backup first (`docker compose exec backup sh /deploy/backup.sh`).
