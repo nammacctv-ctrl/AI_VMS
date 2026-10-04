@@ -29,6 +29,8 @@ services:
     environment:
       MIGRATE_DATABASE_URL: postgres://panel_owner:${DB_OWNER_PASSWORD}@db:5432/panel
       APP_DB_PASSWORD: ${DB_APP_PASSWORD:?set DB_APP_PASSWORD}
+      # lets operator commands print the right links:  docker compose run --rm migrate node scripts/ops.mjs help
+      PLATFORM_ROOT_DOMAIN: ${PLATFORM_ROOT_DOMAIN:?set PLATFORM_ROOT_DOMAIN}
     restart: "no"
     networks: [internal]
 
@@ -42,10 +44,31 @@ services:
       DATABASE_URL: postgres://panel_login:${DB_APP_PASSWORD}@db:5432/panel
       PLATFORM_ROOT_DOMAIN: ${PLATFORM_ROOT_DOMAIN:?set PLATFORM_ROOT_DOMAIN}
       APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:?set APP_ENCRYPTION_KEY}
+      # Keep false: panels are created for customers with the operator tool, not by strangers on the web.
+      ALLOW_PUBLIC_SIGNUP: ${ALLOW_PUBLIC_SIGNUP:-false}
     read_only: true
     tmpfs: [/tmp, /app/.next/cache]
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
+    networks: [internal]
+
+  # Daily backup into ./backups on the server. Copy that folder OFF the server too (see deploy/README.md).
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    environment:
+      PGHOST: db
+      PGUSER: panel_owner
+      PGPASSWORD: ${DB_OWNER_PASSWORD}
+      PGDATABASE: panel
+      KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+      BACKUP_UPLOAD_COMMAND: ${BACKUP_UPLOAD_COMMAND:-}
+    volumes:
+      - ./backups:/backups
+      - ./deploy:/deploy:ro
+    entrypoint: ["sh", "-c", "while true; do sh /deploy/backup.sh || echo 'BACKUP FAILED'; sleep 86400; done"]
     networks: [internal]
 
   cloudflared:

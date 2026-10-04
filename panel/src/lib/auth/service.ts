@@ -160,3 +160,27 @@ export async function confirmTotpSetup(pool: Pool, user: SessionUser, code: stri
     return true;
   });
 }
+
+/**
+ * A signed-in person changes their own password. Needs the current password (so a borrowed,
+ * unlocked laptop is not enough), and signs out every OTHER device, keeping this one.
+ */
+export async function changePassword(
+  pool: Pool, user: SessionUser, currentToken: string, input: { current: string; next: string },
+): Promise<void> {
+  const problem = passwordProblem(input.next);
+  if (problem) throw new AuthError(problem);
+  if (input.next === input.current) throw new AuthError("the new password must be different from the current one");
+  const row = await withTenant(pool, user.tenantId, async (c) =>
+    (await c.query("SELECT password_hash FROM users WHERE id = $1 AND disabled_at IS NULL", [user.id])).rows[0]);
+  if (!row || !(await verifyPassword(input.current, row.password_hash))) {
+    await withTenant(pool, user.tenantId, (c) => audit(c, `user:${user.id}`, "auth.password_change_failed", {}));
+    throw new AuthError("the current password is not right");
+  }
+  const hash = await hashPassword(input.next);
+  await withTenant(pool, user.tenantId, async (c) => {
+    await c.query("UPDATE users SET password_hash = $2, failed_attempts = 0, locked_until = NULL WHERE id = $1", [user.id, hash]);
+    await c.query("DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2", [user.id, sha256(currentToken)]);
+    await audit(c, `user:${user.id}`, "auth.password_changed", {});
+  });
+}

@@ -43,10 +43,10 @@ Phases match the roadmap in [docs/PLATFORM_STRATEGY.md](docs/PLATFORM_STRATEGY.m
 
 ## Phase 2: Compatibility and growth features (weeks 13-18)
 - [ ] T-201 Dhru-compatible API shim (public docs only)
-- [ ] T-202 Custom domains with automatic TLS
+- [~] T-202 Custom domains: the operator tool attaches a domain to a panel and the app answers on it; TLS comes from the Cloudflare tunnel; never tried live
 - [ ] T-203 Installable web app and push notifications
 - [ ] T-204 Analytics: margin, volume, supplier success rate
-- [ ] T-205 Migration importer for Dhru-style exports
+- [~] T-205 Migration importer: spreadsheet import of services (code, name, cost, type, delivery time) done; customer and credit import not built
 - [ ] T-206 Onboard first paying tenants
 
 ## Phase 3: Hardening (weeks 19-24)
@@ -64,9 +64,9 @@ Phases match the roadmap in [docs/PLATFORM_STRATEGY.md](docs/PLATFORM_STRATEGY.m
 - [ ] T-405 Optional signed self-hosted tier
 
 ## Next up
-Done in `panel/` (130 tests + a 32-step real-browser journey, `npm run e2e`): T-101, T-103 to T-106, T-108 to T-110, T-112, T-116, T-119 to T-121 and most of T-122. Partly done: T-102 (CI file not yet run on GitHub; e2e not in CI), T-111 (no nightly reconciliation job), T-126 (images never built).
-To run the first 15 resellers, build in this order:
-1. Supplier connections (T-113 to T-115). Needs the two suppliers' names and API documentation. Until then staff fulfil orders by hand in the queue.
-2. Password reset by email (and email for invitations), backups with a tested restore, deployment to a real server with a domain.
-3. Bulk ordering (T-117), order notifications (T-118), custom domains (T-202), passkeys (T-107), billing (T-123).
-Before real money: legal review T-005 must confirm the staff-managed credit model.
+Done in `panel/` (199 tests + a 39-step real-browser journey, `npm run e2e`): T-101, T-103 to T-106, T-108 to T-110, T-112, T-116, T-119 to T-121 and most of T-122, plus the pre-delivery hardening in `docs/PRE_DELIVERY_AUDIT.md`. Partly done: T-102 (CI file not yet run on GitHub; e2e not in CI), T-111 (no nightly reconciliation job; the restore check verifies the books), T-126 (images never built; packaging simulated), T-202, T-205.
+To deliver to the first GSM reseller (see `docs/DELIVERY_CHECKLIST.md`):
+1. Install on a real server, configure off-server backups, run the restore check, set an uptime alert.
+2. Lawyer sign-off (T-005): services list, terms, refund and privacy policies, the credit model.
+3. Supplier connections (T-113 to T-115) when the suppliers' details arrive; until then staff fulfil orders by hand.
+4. Then: email for invitations and resets, bulk ordering (T-117), notifications (T-118), billing (T-123), passkeys (T-107), force two-factor for owners.

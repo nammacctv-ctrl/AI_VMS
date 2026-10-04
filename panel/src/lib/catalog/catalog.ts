@@ -199,3 +199,76 @@ export async function priceForService(c: PoolClient, groupId: string | null, ser
   return { serviceId: r.id as string, name: r.name as string, supplierId: r.supplier_id as string,
     inputKind: r.input_kind as InputKind, costMinor: cost, priceMinor: p.priceMinor };
 }
+
+// ------------------------------------------------------------ spreadsheet import
+export interface ImportInputRow { line: number; externalRef: string; name: string; category: string; inputKind: string; deliveryTime: string; costMinor: number | null }
+export interface ImportRowResult {
+  line: number; status: "create" | "update" | "unchanged" | "error"; message?: string; name: string;
+  costFromMinor?: number; costToMinor?: number;
+}
+export interface ImportReport {
+  applied: boolean; created: number; updated: number; unchanged: number; errors: number; rows: ImportRowResult[];
+}
+export const MAX_IMPORT_ROWS = 1000;
+
+function checkRow(r: ImportInputRow): string | null {
+  const ref = r.externalRef.trim(), name = r.name.trim();
+  if (!ref || ref.length > 100) return "code is missing or longer than 100 characters";
+  if (!name || name.length > 150) return "name is missing or longer than 150 characters";
+  if (r.category.trim().length > 60) return "category is longer than 60 characters";
+  if (r.deliveryTime.trim().length > 60) return "delivery time is longer than 60 characters";
+  if (r.costMinor === null || !Number.isSafeInteger(r.costMinor) || r.costMinor < 0 || r.costMinor > 1_000_000_000_000) return "cost is not a valid amount";
+  if (!["text", "imei", "serial"].includes(r.inputKind)) return "input type is not recognised (use IMEI, serial or text)";
+  return null;
+}
+
+/**
+ * Create or update many services from one supplier at once. All-or-nothing: if any row has an
+ * error nothing is saved, so a half-imported catalog can never exist. `apply=false` only reports.
+ * Matching is by the supplier's service code; names, categories, costs and times are updated.
+ */
+export const importServices = (
+  pool: Pool, t: string, actor: string, supplierId: string, rows: ImportInputRow[], apply: boolean,
+): Promise<ImportReport> =>
+  withTenant(pool, t, async (c) => {
+    if (rows.length === 0) throw new CatalogError("there are no rows to import");
+    if (rows.length > MAX_IMPORT_ROWS) throw new CatalogError(`import at most ${MAX_IMPORT_ROWS} rows at a time`);
+    const sup = await c.query("SELECT 1 FROM suppliers WHERE id = $1", [supplierId]);
+    if (!sup.rowCount) throw new CatalogError("supplier not found");
+
+    const existing = new Map<string, { id: string; name: string; category: string; cost: bigint; delivery: string; kind: string }>();
+    for (const r of (await c.query("SELECT id, external_ref, name, category, cost_minor, delivery_time, input_kind FROM services WHERE supplier_id = $1", [supplierId])).rows) {
+      existing.set(r.external_ref, { id: r.id, name: r.name, category: r.category, cost: BigInt(r.cost_minor), delivery: r.delivery_time, kind: r.input_kind });
+    }
+
+    const seen = new Set<string>();
+    const results: ImportRowResult[] = [];
+    const plan: { row: ImportInputRow; id?: string }[] = [];
+    for (const r of rows) {
+      const ref = r.externalRef.trim();
+      let problem = checkRow(r);
+      if (!problem && seen.has(ref)) problem = `code "${ref}" appears more than once in the file`;
+      if (problem) { results.push({ line: r.line, status: "error", message: problem, name: r.name.trim() }); continue; }
+      seen.add(ref);
+      const cur = existing.get(ref);
+      const cost = BigInt(r.costMinor!);
+      const category = r.category.trim() || "general";
+      if (!cur) { results.push({ line: r.line, status: "create", name: r.name.trim(), costToMinor: Number(cost) }); plan.push({ row: r }); continue; }
+      const same = cur.name === r.name.trim() && cur.category === category && cur.cost === cost && cur.delivery === r.deliveryTime.trim() && cur.kind === r.inputKind;
+      if (same) results.push({ line: r.line, status: "unchanged", name: cur.name });
+      else { results.push({ line: r.line, status: "update", name: r.name.trim(), costFromMinor: Number(cur.cost), costToMinor: Number(cost) }); plan.push({ row: r, id: cur.id }); }
+    }
+    const count = (s: ImportRowResult["status"]) => results.filter((x) => x.status === s).length;
+    const report: ImportReport = { applied: false, created: count("create"), updated: count("update"), unchanged: count("unchanged"), errors: count("error"), rows: results };
+    if (!apply || report.errors > 0) return report;
+
+    for (const { row, id } of plan) {
+      const params = [row.name.trim(), row.category.trim() || "general", String(row.costMinor), row.deliveryTime.trim(), row.inputKind];
+      if (id) await c.query("UPDATE services SET name = $2, category = $3, cost_minor = $4, delivery_time = $5, input_kind = $6 WHERE id = $1", [id, ...params]);
+      else await c.query(
+        `INSERT INTO services (tenant_id, supplier_id, external_ref, name, category, cost_minor, delivery_time, input_kind)
+         VALUES (app_current_tenant(), $1, $2, $3, $4, $5, $6, $7)`, [supplierId, row.externalRef.trim(), ...params]);
+    }
+    await audit(c, actor, "catalog.services_imported", { supplierId, created: report.created, updated: report.updated, unchanged: report.unchanged });
+    return { ...report, applied: true };
+  });

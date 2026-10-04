@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
-  AuthError, beginTotpSetup, confirmTotpSetup, getSessionUser, login, logout, signupTenant, MAX_FAILED,
+  AuthError, beginTotpSetup, changePassword, confirmTotpSetup, getSessionUser, login, logout, signupTenant, MAX_FAILED,
 } from "@/lib/auth/service";
 import { totpAt, stepFor } from "@/lib/auth/totp";
 import { withTenant } from "@/lib/db/withTenant";
@@ -102,5 +102,23 @@ describe.skipIf(!adminUrl)("database: auth", () => {
     const next = now + 30_000;
     const ok = await login(db.appPool, t, { email: "t@t.test", password: PW, totp: totpAt(secret, stepFor(next)) }, next);
     expect(ok.status).toBe("ok");
+  });
+
+  it("changing your own password needs the current one, keeps this device signed in and signs out the others", async () => {
+    const t = await signupTenant(db.appPool, { slug: "pwchange", name: "P", email: "p@p.test", password: PW });
+    const a1 = await login(db.appPool, t, { email: "p@p.test", password: PW });
+    const a2 = await login(db.appPool, t, { email: "p@p.test", password: PW });
+    if (a1.status !== "ok" || a2.status !== "ok") throw new Error("login");
+    await expect(changePassword(db.appPool, a1.user, a1.token, { current: "wrong-current-pw", next: "a-better-password-1" })).rejects.toThrow(/not right/);
+    await expect(changePassword(db.appPool, a1.user, a1.token, { current: PW, next: "short" })).rejects.toThrow(/at least/);
+    await expect(changePassword(db.appPool, a1.user, a1.token, { current: PW, next: PW })).rejects.toThrow(/different/);
+    await changePassword(db.appPool, a1.user, a1.token, { current: PW, next: "a-better-password-1" });
+    expect(await getSessionUser(db.appPool, t, a1.token)).not.toBeNull(); // this device stays
+    expect(await getSessionUser(db.appPool, t, a2.token)).toBeNull();     // the other device is signed out
+    expect((await login(db.appPool, t, { email: "p@p.test", password: PW })).status).toBe("invalid");
+    expect((await login(db.appPool, t, { email: "p@p.test", password: "a-better-password-1" })).status).toBe("ok");
+    const actions = (await db.ownerPool.query("SELECT action FROM audit_log WHERE tenant_id=$1", [t])).rows.map((r) => r.action);
+    expect(actions).toContain("auth.password_changed");
+    expect(actions).toContain("auth.password_change_failed");
   });
 });

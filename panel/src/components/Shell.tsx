@@ -73,6 +73,9 @@ export function Shell({ children }: { children: ReactNode }) {
           </div>
         </nav>
         <main className="content">
+          {me.user.role !== "reseller" && !me.user.totpEnabled && path !== "/portal/security" && (
+            <div className="alert info" role="status">Your account can change prices, credit and people, so please <Link href="/portal/security">turn on two-factor sign-in</Link>. It takes a minute.</div>
+          )}
           {needed && !can(me, needed) ? (
             <div className="card"><h1>No access</h1><p className="muted">Your role does not include this page. <Link href="/portal">Go to your dashboard</Link>.</p></div>
           ) : children}

@@ -268,6 +268,39 @@ describe.skipIf(!adminUrl)("database: staff, keys, audit, catalog", () => {
       await expect(catalog.setOverride(db.appPool, b, "u", gold, svc, { markupBps: 1 })).rejects.toThrow(/does not exist/);
     });
 
+    it("spreadsheet import: preview saves nothing; apply creates and updates; one bad row blocks everything", async () => {
+      const sup2 = await catalog.createSupplier(db.appPool, a, "u", "Import Supplier");
+      const row = (line: number, ref: string, name: string, cost: number | null, kind = "imei", cat = "Samsung") =>
+        ({ line, externalRef: ref, name, category: cat, inputKind: kind, deliveryTime: "10-60 min", costMinor: cost });
+      const good = [row(2, "A1", "Samsung FRP", 8500), row(3, "A2", "Samsung KG", 12000)];
+
+      const preview = await catalog.importServices(db.appPool, a, "u", sup2, good, false);
+      expect(preview).toMatchObject({ applied: false, created: 2, updated: 0, errors: 0 });
+      expect((await catalog.listServices(db.appPool, a)).filter((s) => s.supplierId === sup2)).toHaveLength(0);
+
+      const applied = await catalog.importServices(db.appPool, a, "u", sup2, good, true);
+      expect(applied).toMatchObject({ applied: true, created: 2 });
+      const saved = (await catalog.listServices(db.appPool, a)).filter((s) => s.supplierId === sup2);
+      expect(saved.map((s) => [s.externalRef, s.costMinor, s.inputKind, s.deliveryTime]).sort()).toEqual([["A1", 8500n, "imei", "10-60 min"], ["A2", 12000n, "imei", "10-60 min"]]);
+
+      // re-import: unchanged rows stay, a changed cost is an update and shows from -> to
+      const again = await catalog.importServices(db.appPool, a, "u", sup2, [row(2, "A1", "Samsung FRP", 8500), row(3, "A2", "Samsung KG", 15000), row(4, "A3", "New one", 500, "text", "")], true);
+      expect(again).toMatchObject({ created: 1, updated: 1, unchanged: 1 });
+      expect(again.rows.find((r) => r.line === 3)).toMatchObject({ status: "update", costFromMinor: 12000, costToMinor: 15000 });
+      expect((await catalog.listServices(db.appPool, a)).find((s) => s.externalRef === "A3")).toMatchObject({ category: "general", inputKind: "text" });
+
+      // all or nothing: one invalid row means NOTHING is written, including the valid rows
+      const before = (await catalog.listServices(db.appPool, a)).length;
+      const bad = await catalog.importServices(db.appPool, a, "u", sup2, [row(2, "B1", "Fine", 100), row(3, "B2", "", 100), row(4, "B3", "No cost", null), row(5, "B1", "Dup code", 100), row(6, "B4", "Bad kind", 100, "banana")], true);
+      expect(bad).toMatchObject({ applied: false, errors: 4 });
+      expect(bad.rows.filter((r) => r.status === "error").map((r) => r.line)).toEqual([3, 4, 5, 6]);
+      expect((await catalog.listServices(db.appPool, a)).length).toBe(before);
+      await expect(catalog.importServices(db.appPool, a, "u", sup2, [], true)).rejects.toThrow(/no rows/);
+      await expect(catalog.importServices(db.appPool, a, "u", sup2, new Array(1001).fill(row(2, "X", "x", 1)), true)).rejects.toThrow(/at most/);
+      await expect(catalog.importServices(db.appPool, a, "u", "00000000-0000-4000-8000-000000000000", good, true)).rejects.toThrow(/supplier not found/);
+      await expect(catalog.importServices(db.appPool, b, "u", sup2, good, true)).rejects.toThrow(/supplier not found/); // another panel's supplier is invisible
+    });
+
     it("price changes and cost changes are audited", async () => {
       const rows = (await withTenant(db.appPool, a, (c) => listAudit(c, { actionPrefix: "catalog.", limit: 200 }))).rows;
       const upd = rows.find((r) => r.action === "catalog.service_updated" && JSON.stringify(r.detail).includes('"costTo":"20000"'));

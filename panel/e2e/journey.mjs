@@ -35,9 +35,9 @@ const pages = [];
 const step = async (name, fn) => {
   try { await fn(); passed++; console.log("PASS", name); }
   catch (e) {
-    console.log("FAIL", name, "\n   ", String(e.message).split("\n")[0]);
+    console.log("FAIL", name, "\n   ", String(e.message).split("\n").slice(0, 3).join(" | "));
     for (const er of errors.slice(0, 4)) console.log("   browser:", er.slice(0, 300));
-    for (const p of pages) console.log("   page:", p.url(), "|", (await p.locator("body").innerText().catch(() => "?")).replace(/\s+/g, " ").slice(0, 160));
+    for (const p of pages) console.log("   page:", p.url(), "|", (await p.locator("body").innerText().catch(() => "?")).replace(/\s+/g, " ").slice(0, 1500));
     process.exitCode = 1; throw e;
   }
 };
@@ -46,10 +46,13 @@ const eq = (a, b, what) => { if (a !== b) throw new Error(`${what}: expected ${J
 const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium", args: ["--no-sandbox"] });
 const errors = [];
 let expectingErrors = false; // set around a deliberate failing request so it is not counted as a bug
-const mk = async (viewport = { width: 1280, height: 800 }) => {
-  const ctx = await browser.newContext({ viewport });
+let nextIp = 10;
+const mk = async (viewport = { width: 1280, height: 800 }, ip = `10.1.0.${nextIp++}`) => {
+  // each browser gets its own client address (as separate visitors would), so the per-address login limit applies per person
+  const ctx = await browser.newContext({ viewport, extraHTTPHeaders: { "cf-connecting-ip": ip } });
   const page = await ctx.newPage();
   pages.push(page);
+  page.on("dialog", (d) => d.accept()); // the app asks "are you sure?" before destructive actions
   page.on("pageerror", (e) => errors.push("pageerror: " + e.message));
   page.on("response", (r) => {
     if (r.status() !== 404 || expectingErrors) return;
@@ -248,6 +251,76 @@ try {
     await owner.getByText("wallet.credited").first().waitFor();
     await shot(owner, "15-audit");
   });
+  await step("if the price changes while a reseller is looking at it, the order is refused (not charged more) and the new price is shown", async () => {
+    await reseller.goto(tenant + "/portal/order");
+    await reseller.getByLabel("Service", { exact: true }).selectOption({ index: 1 });
+    await reseller.getByLabel("IMEI number").fill("352099001761481");
+    await reseller.getByText(/Price ₹120\.00/).waitFor();
+    const before = await reseller.evaluate(async () => (await (await fetch("/api/wallet?limit=1")).json()).balanceMinor);
+    // meanwhile the owner raises the supplier cost from ₹100 to ₹110 (price becomes ₹132)
+    const changed = await owner.evaluate(async () => {
+      const list = (await (await fetch("/api/catalog/services")).json()).services;
+      const svc = list.find((x) => x.name === "Samsung FRP");
+      return (await fetch(`/api/catalog/services/${svc.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ costMinor: 11000 }) })).status;
+    });
+    eq(changed, 200, "owner changed the cost");
+    await reseller.getByRole("button", { name: /Place order/ }).click();
+    await reseller.getByText(/price has changed to 132\.00/).waitFor();
+    eq(await reseller.evaluate(async () => (await (await fetch("/api/wallet?limit=1")).json()).balanceMinor), before, "credit untouched by the refused order");
+    await reseller.getByText(/Price ₹132\.00/).waitFor(); // the form now shows the new price
+    await reseller.getByRole("button", { name: /Place order · ₹132\.00/ }).click();
+    await reseller.getByText(/Order #3 placed/).waitFor();
+    // put the cost back and clear the way for later steps
+    await owner.evaluate(async () => {
+      const svc = (await (await fetch("/api/catalog/services")).json()).services.find((x) => x.name === "Samsung FRP");
+      await fetch(`/api/catalog/services/${svc.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ costMinor: 10000 }) });
+    });
+  });
+  await step("owner removes a person: they are signed out at once, cannot sign back in, and can be restored later", async () => {
+    await owner.goto(tenant + "/admin/customers");
+    await owner.getByLabel("Email").fill("temp@shop.test");
+    await owner.getByRole("button", { name: "Create invitation" }).click();
+    await owner.getByText(/Send this link/).waitFor();
+    const invite = (await owner.locator("code").first().innerText()).trim();
+    const temp = await mk();
+    await temp.goto(invite);
+    await temp.getByLabel("Choose a password").fill(PW);
+    await temp.getByLabel("Repeat password").fill(PW);
+    await temp.getByRole("button", { name: "Create my account" }).click();
+    await temp.waitForURL("**/login");
+    await temp.getByLabel("Email").fill("temp@shop.test");
+    await temp.getByLabel("Password").fill(PW);
+    await temp.getByRole("button", { name: "Sign in" }).click();
+    await temp.waitForURL("**/portal");
+
+    await owner.reload();
+    await owner.getByRole("row", { name: /temp@shop\.test/ }).getByRole("button", { name: "Remove" }).click();
+    await owner.getByRole("row", { name: /temp@shop\.test/ }).waitFor({ state: "detached" }); // hidden from the default list
+    await owner.getByLabel("Show removed people").check();
+    await owner.getByRole("row", { name: /temp@shop\.test/ }).getByText("Removed").waitFor();
+    await shot(owner, "22-customers-removed");
+
+    await temp.reload();
+    await temp.waitForURL("**/login"); // their session ended immediately
+    await temp.getByLabel("Email").fill("temp@shop.test");
+    await temp.getByLabel("Password").fill(PW);
+    await temp.getByRole("button", { name: "Sign in" }).click();
+    await temp.getByText(/invalid email or password/).waitFor();
+
+    await owner.getByRole("row", { name: /temp@shop\.test/ }).getByRole("button", { name: "Restore access" }).click();
+    await owner.getByText(/Send this link to temp@shop\.test/).waitFor();
+    const restore = (await owner.locator("code").first().innerText()).trim();
+    await temp.goto(restore);
+    await temp.getByLabel("Choose a password").fill("restored-password-77");
+    await temp.getByLabel("Repeat password").fill("restored-password-77");
+    await temp.getByRole("button", { name: "Create my account" }).click();
+    await temp.waitForURL("**/login");
+    await temp.getByLabel("Email").fill("temp@shop.test");
+    await temp.getByLabel("Password").fill("restored-password-77");
+    await temp.getByRole("button", { name: "Sign in" }).click();
+    await temp.waitForURL("**/portal");
+    await temp.context().close();
+  });
   await step("reseller turns on two-factor, signs out, and must use a code to sign in", async () => {
     await reseller.goto(tenant + "/portal/security");
     await reseller.getByRole("button", { name: "Turn on two-factor" }).click();
@@ -288,6 +361,63 @@ try {
     await shot(reseller, "17-api-keys-mobile");
     await reseller.reload();
     if ((await text(reseller)).includes(key)) throw new Error("key still visible after reload");
+  });
+  await step("staff without two-factor are nudged to turn it on; a person can change their own password", async () => {
+    await owner.goto(tenant + "/admin");
+    await owner.getByText(/please turn on two-factor sign-in/).waitFor();
+    await owner.goto(tenant + "/portal/security");
+    await owner.getByLabel("Current password").fill(PW);
+    await owner.getByLabel("New password", { exact: true }).fill("short");
+    eq(await owner.getByRole("button", { name: "Change password" }).isDisabled(), true, "too short a password cannot be submitted");
+    await owner.getByLabel("New password", { exact: true }).fill("owner-changed-password-1");
+    await owner.getByLabel("Repeat new password").fill("something-different-here");
+    await owner.getByText("The two new passwords do not match.").waitFor();
+    await owner.getByLabel("Repeat new password").fill("owner-changed-password-1");
+    await owner.getByRole("button", { name: "Change password" }).click();
+    await owner.getByText(/Password changed\. Any other devices have been signed out\./).waitFor();
+    // wrong current password is refused with a clear message
+    await owner.getByLabel("Current password").fill("not-my-password-123");
+    await owner.getByLabel("New password", { exact: true }).fill("owner-changed-password-2");
+    await owner.getByLabel("Repeat new password").fill("owner-changed-password-2");
+    await owner.getByRole("button", { name: "Change password" }).click();
+    await owner.getByText("the current password is not right").waitFor();
+    // the new password really works for a fresh sign-in
+    const again = await mk();
+    await again.goto(tenant + "/login");
+    await again.getByLabel("Email").fill("owner@shop.test");
+    await again.getByLabel("Password").fill("owner-changed-password-1");
+    await again.getByRole("button", { name: "Sign in" }).click();
+    await again.waitForURL("**/admin");
+    await again.context().close();
+  });
+  await step("a reseller who lost their phone: owner resets access, 2FA is cleared, old password and old sessions stop working", async () => {
+    await owner.goto(tenant + "/admin/customers");
+    await owner.getByRole("row", { name: /reseller@shop\.test/ }).getByRole("button", { name: "Reset access" }).click();
+    await owner.getByText(/Send this link to reseller@shop\.test/).waitFor();
+    const link = (await owner.locator("code").first().innerText()).trim();
+    const fresh = await mk();
+    await fresh.goto(link);
+    await fresh.getByLabel("Choose a password").fill("a-new-password-after-reset");
+    await fresh.getByLabel("Repeat password").fill("a-new-password-after-reset");
+    await fresh.getByRole("button", { name: "Create my account" }).click();
+    await fresh.waitForURL("**/login");
+    // old password no longer works
+    await fresh.getByLabel("Email").fill("reseller@shop.test");
+    await fresh.getByLabel("Password").fill(PW);
+    await fresh.getByRole("button", { name: "Sign in" }).click();
+    await fresh.getByText(/invalid email or password/).waitFor();
+    // new password works and no authenticator code is asked for
+    await fresh.getByLabel("Password").fill("a-new-password-after-reset");
+    await fresh.getByRole("button", { name: "Sign in" }).click();
+    await fresh.waitForURL("**/portal");
+    await fresh.context().close();
+    // the reseller's earlier session was ended; sign in again on that page for the steps that follow
+    await reseller.reload();
+    await reseller.waitForURL("**/login");
+    await reseller.getByLabel("Email").fill("reseller@shop.test");
+    await reseller.getByLabel("Password").fill("a-new-password-after-reset");
+    await reseller.getByRole("button", { name: "Sign in" }).click();
+    await reseller.waitForURL("**/portal");
   });
   await step("a reseller cannot use branding: no page, no upload", async () => {
     await reseller.goto(tenant + "/admin/branding");
@@ -369,6 +499,35 @@ try {
     await owner.getByRole("button", { name: "Use this look" }).first().waitFor().catch(() => {});
     await shot(owner, "21-branding-history");
   });
+  await step("owner imports a spreadsheet of services: a bad row blocks everything, then a clean sheet imports", async () => {
+    await owner.goto(tenant + "/admin/catalog");
+    await owner.getByRole("button", { name: "Services", exact: true }).click();
+    await owner.getByRole("button", { name: "Import many services from a spreadsheet" }).click();
+    const sheet = (cost3) => `code,name,category,type,cost,delivery time\nZ1,Zeta One,Zeta,IMEI,85.00,10-60 minutes\nZ2,Zeta Two,Zeta,serial,"1,250.50",Instant\nZ3,Zeta Three,Zeta,IMEI,${cost3},1 hour\n`;
+    // 1) an UNQUOTED comma shifts the columns: refused before anything is sent
+    await owner.getByLabel("Rows").fill(sheet("1,5"));
+    await owner.getByRole("button", { name: "Check the sheet" }).click();
+    await owner.getByText(/Nothing was checked, because 1 row would be read wrongly\. Row 4 has more columns than the header/).waitFor();
+    // 2) a QUOTED "1,5" is ambiguous (₹1.50 or ₹15?): the server refuses it and nothing is saved
+    await owner.getByLabel("Rows").fill(sheet('"1,5"'));
+    await owner.getByRole("button", { name: "Check the sheet" }).click();
+    await owner.getByText(/1 row need fixing\./).waitFor();
+    await owner.getByText(/Row 4 \(Zeta Three\): cost is not a valid amount/).waitFor();
+    eq(await owner.getByRole("button", { name: "Import", exact: true }).isDisabled(), true, "import blocked while a row is bad");
+    await shot(owner, "23-import-errors");
+    await owner.getByLabel("Rows").fill(sheet("20"));
+    await owner.getByRole("button", { name: "Check the sheet" }).click();
+    await owner.getByText(/Ready to import: 3 new, 0 updated, 0 unchanged/).waitFor();
+    await owner.getByRole("button", { name: "Import", exact: true }).click();
+    await owner.getByText("Imported: 3 added, 0 updated, 0 unchanged.").waitFor();
+    await owner.getByText("Zeta Two").waitFor();
+    await owner.getByText("₹1,250.50").waitFor();
+    // importing the same sheet again changes nothing
+    await owner.getByRole("button", { name: "Import many services from a spreadsheet" }).click();
+    await owner.getByLabel("Rows").fill(sheet("20"));
+    await owner.getByRole("button", { name: "Check the sheet" }).click();
+    await owner.getByText(/Ready to import: 0 new, 0 updated, 3 unchanged/).waitFor();
+  });
   await step("signing out ends the session", async () => {
     await owner.goto(tenant + "/admin");
     await owner.getByRole("button", { name: "Sign out" }).click();
@@ -398,6 +557,24 @@ try {
     eq(frame, "blocked", "connections to other sites must be blocked");
     await p.waitForTimeout(400); // let the browser report the deliberate violations before we stop ignoring them
     expectingErrors = false;
+    await p.context().close();
+  });
+  await step("someone guessing passwords is slowed down: too many tries from one address get 'try again in a minute'", async () => {
+    const p = await mk({ width: 1280, height: 800 }, "10.9.9.9");
+    await p.goto(tenant + "/login");
+    expectingErrors = true; // the rejected attempts are expected to log 401/429
+    const codes = await p.evaluate(async () => {
+      const out = [];
+      for (let i = 0; i < 14; i++) {
+        const r = await fetch("/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: `nobody${i}@shop.test`, password: "wrong-password-123" }) });
+        out.push(r.status);
+      }
+      return out;
+    });
+    await p.waitForTimeout(300);
+    expectingErrors = false;
+    eq(codes.slice(0, 10).every((c) => c === 401), true, "first 10 tries are normal failures");
+    eq(codes.slice(10).every((c) => c === 429), true, "tries after the 10th are blocked");
     await p.context().close();
   });
   await step("no browser errors during the whole journey", async () => {

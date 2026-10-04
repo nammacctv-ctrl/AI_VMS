@@ -28,9 +28,32 @@ export default function Security() {
     finally { setBusy(false); }
   }
 
+  const [pw, setPw] = useState({ current: "", next: "", again: "" });
+  const [pwMsg, setPwMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+  async function changePw(e: FormEvent) {
+    e.preventDefault(); setPwMsg(null); setBusy(true);
+    try {
+      await api("/api/auth/password", { body: { current: pw.current, next: pw.next } });
+      setPw({ current: "", next: "", again: "" });
+      setPwMsg({ kind: "ok", text: "Password changed. Any other devices have been signed out." });
+    } catch (x) { setPwMsg({ kind: "error", text: x instanceof ApiError ? x.message : "Could not change the password." }); }
+    finally { setBusy(false); }
+  }
+
   return (
     <>
       <div className="topbar"><div><h1>Security</h1><p className="muted">{me.user.email}</p></div></div>
+      <div className="card" style={{ marginBottom: "1rem" }}>
+        <h2 style={{ marginTop: 0 }}>Change password</h2>
+        {pwMsg && <Alert kind={pwMsg.kind}>{pwMsg.text}</Alert>}
+        <form onSubmit={changePw} noValidate>
+          <Field id="curpw" label="Current password"><input id="curpw" className="input" type="password" autoComplete="current-password" value={pw.current} onChange={(e) => setPw({ ...pw, current: e.target.value })} /></Field>
+          <Field id="newpw" label="New password" hint="At least 12 characters. A few random words works well."><input id="newpw" className="input" type="password" autoComplete="new-password" value={pw.next} onChange={(e) => setPw({ ...pw, next: e.target.value })} /></Field>
+          <Field id="newpw2" label="Repeat new password"><input id="newpw2" className="input" type="password" autoComplete="new-password" value={pw.again} onChange={(e) => setPw({ ...pw, again: e.target.value })} /></Field>
+          {pw.again && pw.again !== pw.next && <p className="err">The two new passwords do not match.</p>}
+          <button className="btn" type="submit" disabled={busy || !pw.current || pw.next.length < 12 || pw.next !== pw.again}>Change password</button>
+        </form>
+      </div>
       <div className="card">
         <h2 style={{ marginTop: 0 }}>Two-factor sign-in</h2>
         {err && <Alert>{err}</Alert>}

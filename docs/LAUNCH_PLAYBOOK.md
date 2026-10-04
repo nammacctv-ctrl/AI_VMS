@@ -29,6 +29,8 @@ Say it like this: *"We are a new platform from an established company. We are st
 
 **Do not take real customer money or real orders until the "not ready" column is built and tested.** Next build steps, in order: (1) the two supplier connections, (2) password reset, backups and putting it on a real server, (3) bulk ordering and notifications.
 
+> Delivering to a reseller who is ready now? Use `DELIVERY_CHECKLIST.md`. What was audited and what is still open: `PRE_DELIVERY_AUDIT.md`.
+
 ## Before you contact anyone: your 10 minutes of credibility
 
 Have these ready. Each one makes a new business look established.

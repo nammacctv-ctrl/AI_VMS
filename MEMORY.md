@@ -55,6 +55,7 @@ _None yet._
 
 ## Changelog of these docs
 - 2026-10-04: Created PRD, ARCHITECTURE, RULES, DESIGN, TASKS, MEMORY from the strategy document.
+- 2026-10-04: Pre-delivery audit and hardening, operator tool, spreadsheet import, backups, change password (199 tests, 39 browser steps). See docs/PRE_DELIVERY_AUDIT.md and docs/DELIVERY_CHECKLIST.md.
 - 2026-10-04: Added branding (T-119, T-120): 21 new tests and 9 new browser steps. Found and fixed through the browser run: a per-process cache that pages and API routes did not share, and the tab title ignoring the panel name.
 - 2026-10-04: Added all screens (T-121, most of T-122), the e2e journey and fixes found by it.
 - 2026-10-04: Added reseller credit (staff-managed) and orders with manual fulfilment (T-116): 108 tests, two real race tests, 16-step HTTP walkthrough. Lesson: row-locking an account needs UPDATE rights the append-only ledger role must not have; use advisory locks instead.
@@ -79,6 +80,11 @@ _None yet._
 - Safety: a theme is validated data (hex colour, fixed lists), compiled to CSS on the server; no tenant text reaches CSS. The server re-validates on publish (browser preview is only a preview). Logo is checked by its real first bytes, served with nosniff and a sandbox CSP. Theme versions cannot be edited or deleted, even by the database owner; the app role may now rename a panel but not change its address, plan or status.
 - Known limits: the per-request brand cache is in memory (15 s) and invalidated through `globalThis`; with more than one app instance a change can take up to 15 s to appear on the others. Branding applies to panel pages only: invitation and notification emails (not built yet) will need it too. Custom domains are resolved but not yet provisioned with TLS (T-202). No logo cropping/resizing; logos are shown at up to 36 px (menu) and 56 px (login) high.
 
+## Pre-delivery audit (2026-10-04)
+Full table: `docs/PRE_DELIVERY_AUDIT.md`. Summary: 17 loopholes found and fixed (notably: removing a reseller with orders crashed; no recovery from a lost phone or password; open public signup; no CSP; price could change between viewing and ordering; ambiguous costs in imports; no backups). Verdict: ready for a supervised pilot with one reseller once installed on a real server; not for unattended use or significant money until Docker/tunnel are proven live, off-server backups are configured, legal sign-off is done, and (ideally) supplier connections exist.
+- Decisions: removing a person disables them (never deletes); signup is closed by default and panels are created with `scripts/ops.mjs`; CSP has no `strict-dynamic` and no inline `<style>` (theme is a stylesheet); amounts that are ambiguous are refused rather than guessed.
+- Operator tool: `scripts/ops.mjs` (create-panel, add-domain, reset-access, suspend, activate, list). Runs with the database owner login on the server only.
+
 ## Known gaps in auth (do before real customers)
 - Login is limited to 10 tries per minute per visitor and locks an account for 15 minutes after 5 failures (which also lets someone lock a victim out for 15 minutes). The limiter is in memory, per app instance; move to Redis before running more than one instance.
 - No password reset or email verification; no passkeys yet.
@@ -86,6 +92,11 @@ _None yet._
 - Losing `APP_ENCRYPTION_KEY` makes stored 2FA secrets unreadable; no key rotation yet.
 
 ## Lessons learned (code)
+- A strict CSP with a per-request nonce breaks anything that re-renders a nonce'd element after a client refresh (the nonce changes, the document keeps the first one). Serve dynamic styles as same-origin stylesheets or style attributes instead.
+- `'strict-dynamic'` lets any script created at run time run, which undermines the point of the policy for injected-script tests. Not needed here.
+- CSV: an unquoted comma shifts columns silently. Refuse rows wider than the header; refuse ambiguous amounts ("1,5", "12 34").
+- A deliberately failing request in a browser test is reported after the fact; keep the "expected error" flag on until the page is closed, or the test becomes flaky.
+- Probe first: reproduce a suspected bug with a throwaway test before fixing (the user-removal crash was confirmed this way).
 - Test hygiene: `npx next start` leaves the real `next-server` running when its wrapper is killed, so a later run silently talked to a stale build on the same port and failed in confusing ways. `e2e/run.sh` now starts the server binary directly and kills its children; check with `pgrep -x next-server`.
 - Redirecting every unauthenticated request to /login also redirected Next's background prefetch requests, which then 404ed. The proxy now redirects only real page loads.
 - Menu highlighting by `startsWith` lit up "New order" and "My orders" together (`/portal/order` is a prefix of `/portal/orders`); fixed with a path-segment match.

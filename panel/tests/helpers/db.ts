@@ -7,6 +7,7 @@ import pg from "pg";
 export const adminUrl = process.env.TEST_ADMIN_DATABASE_URL;
 
 export interface TestDb {
+  ownerUrl: string;
   appPool: pg.Pool;
   ownerPool: pg.Pool;
   drop: () => Promise<void>;
@@ -50,6 +51,7 @@ export async function createTestDb(): Promise<TestDb> {
 
   const appPool = new pg.Pool({ connectionString: withDb(APP_LOGIN, APP_PASSWORD), max: 4 });
   return {
+    ownerUrl: withDb(),
     appPool,
     ownerPool,
     drop: async () => {
